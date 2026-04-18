@@ -1,4 +1,5 @@
 import sys
+import uuid
 from orchestrator.pipeline import run_pipeline
 
 def main():
@@ -11,7 +12,8 @@ def main():
             print("No question entered. Exiting.")
             return
 
-        run_pipeline(user_query)
+        request_id = str(uuid.uuid4())
+        run_pipeline(user_query, request_id=request_id)
     except KeyboardInterrupt:
         print("\nExiting...")
         sys.exit(0)

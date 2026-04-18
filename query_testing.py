@@ -1,7 +1,9 @@
+# DEPRECATED: This file will be removed after test coverage is implemented. This script will be removed in future releases. Do not extend.
 import requests
 import psycopg2
 import os
 from dotenv import load_dotenv
+from agents.data_analyst import analyze
 
 load_dotenv()
 
@@ -120,7 +122,7 @@ print("\nGenerated SQL:", sql_query)
 def fix_case(sql):
     return sql.replace("'science'", "'SCIENCE'")
 
-sql_query = fix_case(sql_query)
+# sql_query = fix_case(sql_query) # commented out to see if it works without manual fix now
 final_sql = enforce_limit(sql_query)
 
 print("Executing SQL:", final_sql)
@@ -132,46 +134,25 @@ results = cursor.fetchall()
 print("\nResults:")
 for row in results:
     print(row)
-def analyze_results(results, cursor):
-    if not results:
-        return "No data found to analyze."
 
-    columns = [desc[0] for desc in cursor.description]
-    formatted_data = "\n".join(
-        [", ".join([f"{col}: {val}" for col, val in zip(columns, row)]) for row in results]
-    )
+# Centralized Analysis
+columns = [desc[0] for desc in cursor.description]
+rows_list = [dict(zip(columns, row)) for row in results]
 
-    analysis_prompt = f"""
-You are answering a user question using SQL query results.
+analysis_context = {
+    "user_query": user_query,
+    "data": rows_list
+}
 
-User Question:
-{user_query}
-
-Data:
-{formatted_data}
-
-RULES:
-- Answer the user's question directly
-- Use the data to support your answer
-- Do NOT invent external reasons
-- If the question asks "why", explain based ONLY on visible data patterns
-- If true cause cannot be determined, clearly say so
-
-OUTPUT:
-- 2 to 4 bullet points
-"""
-
-    data = {
-        "model": "openai/gpt-3.5-turbo",
-        "messages": [{"role": "user", "content": analysis_prompt}]
-    }
-
-    response = requests.post(url, headers=headers, json=data)
-    return response.json()["choices"][0]["message"]["content"]
-
-analysis = analyze_results(results, cursor)
+result = analyze(analysis_context)
 
 print("\nANALYSIS:")
-print(analysis)
+if result["status"] == "success":
+    for i, insight in enumerate(result["insights"], 1):
+        print(f"{i}. {insight}")
+    if "meta" in result:
+        print(f"(Rows analyzed: {result['meta']['rows_used']})")
+else:
+    print(f"Error: {result.get('message', 'Unknown error')}")
 
 conn.close()
