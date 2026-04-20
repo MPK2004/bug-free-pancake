@@ -5,7 +5,7 @@ from db.connection import get_db_connection
 from db.schema import get_schema, format_schema
 from db.executor import is_safe_sql, enforce_limit, fix_case, execute_query
 from llm.sql_generator import generate_sql
-from agents.data_analyst import analyze
+from orchestrator import router
 
 def run_pipeline(user_query, request_id=None):
     """
@@ -62,6 +62,9 @@ def run_pipeline(user_query, request_id=None):
         result = None
         attempt_summary = []
         
+        agent = router.route(user_query, rows_list)
+        print(f"Selected agent: {agent.NAME}")
+        
         for attempt in range(1, MAX_RETRIES + 1):
             now = time.monotonic()
             cb = run_pipeline._circuit_states[cb_key]
@@ -94,7 +97,7 @@ def run_pipeline(user_query, request_id=None):
             }
             
             attempt_start = time.monotonic()
-            result = analyze(analysis_context)
+            result = agent.analyze(analysis_context)
             attempt_duration = int((time.monotonic() - attempt_start) * 1000)
             
             err_code = result.get("code", "UNKNOWN")
