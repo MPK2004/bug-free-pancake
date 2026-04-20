@@ -34,3 +34,7 @@ dist/
 *.tmp
 *.swp
 
+# Files
+EVOLUTION.md
+RULES.md
+test*.py

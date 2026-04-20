@@ -8,6 +8,7 @@ DEBUG = os.getenv('DEBUG', 'false').lower() == 'true'
 MAX_ROWS = 50
 MAX_FIELD_LENGTH = 200
 MAX_RESPONSE_CHARS = 5000
+NAME = "Data Analyst"
 
 def redact(s: str) -> str:
     """Masks API keys, Auth headers, cookies, and strips PII/Credentialed URLs."""
