@@ -7,7 +7,7 @@ engine = create_engine(
 
 try:
     df = pd.read_sql("SELECT * FROM sales LIMIT 10;", engine)
-    print("✅ Connected successfully!\n")
+    print("Connected successfully!\n")
     print(df)
 except Exception as e:
-    print("❌ Error:", e)
+    print("Error:", e)
