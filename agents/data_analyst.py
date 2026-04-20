@@ -10,6 +10,7 @@ MAX_FIELD_LENGTH = 200
 MAX_RESPONSE_CHARS = 5000
 
 def redact(s: str) -> str:
+    """Masks API keys, Auth headers, cookies, and strips PII/Credentialed URLs."""
     if not isinstance(s, str):
         return s
     s = re.sub('(sk-[A-Za-z0-9]{20,})', '****', s)
@@ -19,22 +20,29 @@ def redact(s: str) -> str:
     return s
 
 def _normalize(s: str) -> str:
+    """Surgical normalization: Collapses whitespace, lowercases, preserves semantic / % - +."""
     s = re.sub('\\s+', ' ', s).strip().lower()
     return re.sub('[^a-z0-9\\s/%+\\-]', '', s)
 
 def _safe_stringify(val):
+    """Truncates long field values to MAX_FIELD_LENGTH and flags truncation."""
     s = str(val)
     if len(s) > MAX_FIELD_LENGTH:
         return (s[:MAX_FIELD_LENGTH] + '...', True)
     return (s, False)
 
 def _clean_line(line: str) -> str:
+    """Strips bullet/number prefixes and leading/trailing whitespace."""
     return re.sub('^\\s*(?:[-*]|\\d+[\\.\\)])\\s*', '', line).strip()
 
 def _is_weak(s: str) -> bool:
+    """Returns True if the string has fewer than 3 words (likely noise)."""
     return len(s.split()) < 3
 
 def analyze(context: dict):
+    """
+    Core analysis function with strict parsing and safety.
+    """
     start_cpu = time.monotonic()
     if not isinstance(context, dict):
         return {'status': 'error', 'type': 'validation', 'code': 'VALIDATION_ERROR', 'message': 'Invalid input: context must be a dictionary.', 'meta': {'request_id': str(uuid.uuid4()), 'attempts': 1, 'insight_count': 0}}
