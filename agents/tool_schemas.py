@@ -47,5 +47,30 @@ FINANCIAL_TOOLS = [
                 "required": ["proposals_data", "tenants_data"]
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "calculate_adjusted_value",
+            "description": "Computes adjusted values using raw strategic metrics: expected_yield, demand (sales), and priority. Use this for ranking proposals strategically.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "proposals_data": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "expected_yield": {"type": "number"},
+                                "demand": {"type": "number"},
+                                "priority": {"type": "string", "enum": ["HIGH", "MEDIUM", "LOW"]}
+                            }
+                        },
+                        "description": "List of proposals with raw strategic metrics."
+                    }
+                },
+                "required": ["proposals_data"]
+            }
+        }
     }
 ]

@@ -18,7 +18,27 @@ def financial_analysis(proposals_data: list) -> list:
     """
     if not proposals_data:
         return []
-    df = pd.DataFrame(proposals_data)
+        
+    # Input Validation: Type and Range Checks
+    valid_proposals = []
+    for p in proposals_data:
+        try:
+            p['proposed_rent'] = float(p.get('proposed_rent', 0))
+            p['expected_sales'] = float(p.get('expected_sales', 0))
+            p['revenue_share'] = float(p.get('revenue_share', 0))
+            
+            if p['proposed_rent'] < 0 or p['expected_sales'] < 0 or p['revenue_share'] < 0:
+                print(f"[warning] Negative values detected in proposal: {p}", file=sys.stderr)
+            
+            valid_proposals.append(p)
+        except (ValueError, TypeError):
+            print(f"[warning] Skipping invalid proposal data: {p}", file=sys.stderr)
+            continue
+
+    if not valid_proposals:
+        return []
+
+    df = pd.DataFrame(valid_proposals)
     df['annual_rent'] = df['proposed_rent'] * 12
     df['expected_revenue'] = df['expected_sales'] * (df['revenue_share'] / 100)
     df['total_value'] = df['annual_rent'] + df['expected_revenue']
@@ -74,9 +94,38 @@ def compare_proposals(proposals_data: list, tenants_data: list) -> dict:
         "best_proposal": best
     }
 
+def calculate_adjusted_value(proposals_data: list) -> list:
+    """
+    Computes adjusted values using raw strategic metrics: expected_yield, demand, and priority.
+    Formula: Adjusted Value = yield * demand * priority_weight
+    Priority weights: HIGH=3, MEDIUM=2, LOW=1
+    """
+    if not proposals_data:
+        return []
+    
+    PRIORITY_WEIGHTS = {'HIGH': 3, 'MEDIUM': 2, 'LOW': 1}
+    
+    results = []
+    for p in proposals_data:
+        try:
+            p_yield = float(p.get('expected_yield', 1))
+            p_demand = float(p.get('demand', p.get('total_sales', 0)))
+            p_priority = str(p.get('priority', 'LOW')).upper()
+            
+            weight = PRIORITY_WEIGHTS.get(p_priority, 1)
+            adjusted_value = p_yield * p_demand * weight
+            
+            p['adjusted_value'] = adjusted_value
+            results.append(p)
+        except (ValueError, TypeError):
+            continue
+            
+    return sorted(results, key=lambda x: x['adjusted_value'], reverse=True)
+
 TOOL_REGISTRY = {
     "financial_analysis": financial_analysis,
-    "compare_proposals": compare_proposals
+    "compare_proposals": compare_proposals,
+    "calculate_adjusted_value": calculate_adjusted_value
 }
 
 def run():

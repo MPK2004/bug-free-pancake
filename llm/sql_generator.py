@@ -39,6 +39,8 @@ Mode: {mode.upper()}
 
 SCALING RULES:
 {instructions}
+- If the query involves comparison, ranking, or "highest/lowest" values: DO NOT use LIMIT and DO NOT use ORDER BY. Return all relevant rows without sorting bias for analysis.
+- DO NOT compute final metrics (like adjusted values or rankings) in SQL. Return the raw component fields (e.g., expected_yield, total_sales, priority) so the agent can perform the calculation via tools.
 
 3. CASE HANDLING:
 - Mall and Tenant names are in Proper Case (e.g., 'Mall of Istanbul', 'Zara').

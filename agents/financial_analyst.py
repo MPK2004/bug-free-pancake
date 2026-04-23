@@ -27,32 +27,40 @@ def analyze(context: dict):
     Financial Analyst: Specialized in financial calculations via tool-calling loop.
     """
     start_time = time.monotonic()
-    user_query = context.get('user_query')
+    query = context.get('query')
     raw_data = context.get('data', [])
     request_id = context.get('request_id') or str(uuid.uuid4())
     
     # We might need both proposals and tenants. 
     # If the SQL query was generic, we might have mixed data or just one type.
-    # For simplicity, we'll tell the LLM what data we have.
+    # Structured data for prompt
     data_summary = json.dumps(raw_data[:20], indent=2)
 
     system_prompt = f"""
-You are a Financial Analyst for Cenomi malls. Your role is to perform precise financial calculations and comparisons.
+You are a Financial Analyst.
+
+You are given:
+1. A user query
+2. A structured dataset (from a database)
+
+The dataset is already precomputed and contains the required metrics.
 
 STRICT RULES:
-1. If numerical computation is required (annual rent, total value, adjusted value, comparison), you MUST call a tool. 
-2. Never estimate or approximate mathematical results. 
-3. If insufficient inputs are provided to call a tool, ask for the missing fields.
-4. Use the provided dataset to extract parameters for the tools.
-5. Your final response must be a natural language summary of the results returned by the tools.
+- Use ONLY the dataset provided below.
+- DO NOT ask for more data.
+- DO NOT assume missing fields.
+- MANDATORY: If numerical computation is required (ranking, adjusted value, comparison), you MUST call a tool. NEVER calculate manually.
+- PROVIDE BUSINESS INSIGHTS: Explain WHY the top result is superior (e.g., mention demand, yield, or priority category).
+- If the dataset contains only one row but a comparison or ranking is required, inform the user that insufficient data is available for a comparative analysis.
+- If the dataset already contains the answer, summarize it directly.
 
-DATASET AVAILABLE:
+DATASET:
 {data_summary}
 """
 
     messages = [
         {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user_query}
+        {"role": "user", "content": f"User Query: {query}"}
     ]
 
     MAX_STEPS = 3
@@ -107,8 +115,8 @@ DATASET AVAILABLE:
                     })
                     continue
 
-                if DEBUG:
-                    print(f"[tool] call name={function_name} args={arguments}", file=sys.stderr)
+                # MANDATORY: Log tool execution to verify enforcement
+                print(f"[tool] EXECUTING: {function_name} with args: {arguments}", file=sys.stderr)
                 
                 # Validation & Execution
                 if function_name not in TOOL_REGISTRY:

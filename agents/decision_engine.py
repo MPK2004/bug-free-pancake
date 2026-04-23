@@ -24,7 +24,7 @@ def analyze(context: dict):
     Strategic Decision Engine: Deterministic scoring + LLM explanation.
     """
     start_time = time.monotonic()
-    user_query = context.get('user_query')
+    query = context.get('query')
     raw_data = context.get('data', [])
     request_id = context.get('request_id') or str(uuid.uuid4())
 
@@ -113,7 +113,7 @@ def analyze(context: dict):
     analysis_prompt = f"""
 Provide a strategic business recommendation based on the following deterministic scores.
 
-User Question: {user_query}
+User Question: {query}
 
 COMPUTED DECISIONS (Highest Score = Best Strategic Fit):
 {decision_summary}

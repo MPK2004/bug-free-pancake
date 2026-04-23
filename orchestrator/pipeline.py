@@ -15,7 +15,8 @@ def get_analysis_mode(query):
     q = query.lower()
     strategic_signals = [
         "recommend", "best", "compare", "should", "which is better",
-        "what should", "suggest", "rank", "choice", "choose", "fit"
+        "what should", "suggest", "rank", "choice", "choose", "fit",
+        "highest", "lowest", "most", "least"
     ]
     if any(s in q for s in strategic_signals):
         return "strategic"
@@ -105,9 +106,14 @@ def run_pipeline(user_query, request_id=None):
 
             
             analysis_context = {
-                "user_query": user_query, "data": rows_list, "request_id": request_id,
-                "attempt": attempt, "deadline_s": DEADLINE_SECONDS, "remaining_s": remaining_s,
-                "model": model, "region": os.getenv("LLM_REGION", "auto")
+                "query": user_query, 
+                "data": rows_list, 
+                "request_id": request_id,
+                "attempt": attempt, 
+                "deadline_s": DEADLINE_SECONDS, 
+                "remaining_s": remaining_s,
+                "model": model, 
+                "region": os.getenv("LLM_REGION", "auto")
             }
             
             attempt_start = time.monotonic()
