@@ -1,11 +1,25 @@
 import os
 import time
 import random
+import sys
 from db.connection import get_db_connection
 from db.schema import get_schema, format_schema
 from db.executor import is_safe_sql, enforce_limit, fix_case, execute_query
 from llm.sql_generator import generate_sql
 from orchestrator import router
+
+def get_analysis_mode(query):
+    """
+    Routes query to STRATEGIC or ANALYTICAL mode based on intent patterns.
+    """
+    q = query.lower()
+    strategic_signals = [
+        "recommend", "best", "compare", "should", "which is better",
+        "what should", "suggest", "rank", "choice", "choose", "fit"
+    ]
+    if any(s in q for s in strategic_signals):
+        return "strategic"
+    return "analytical"
 
 def run_pipeline(user_query, request_id=None):
     """
@@ -16,10 +30,9 @@ def run_pipeline(user_query, request_id=None):
     cursor = conn.cursor()
 
     try:
-        schema_dict = get_schema(cursor)
-        schema_str = format_schema(schema_dict)
-
-        sql_query = generate_sql(user_query, schema_str)
+        schema_str = format_schema(get_schema(cursor))
+        analysis_mode = get_analysis_mode(user_query)
+        sql_query = generate_sql(user_query, schema_str, mode=analysis_mode)
         print(f"\nGenerated SQL: {sql_query}")
 
         sql_query = fix_case(sql_query)
@@ -90,6 +103,7 @@ def run_pipeline(user_query, request_id=None):
                 }
                 break
 
+            
             analysis_context = {
                 "user_query": user_query, "data": rows_list, "request_id": request_id,
                 "attempt": attempt, "deadline_s": DEADLINE_SECONDS, "remaining_s": remaining_s,
@@ -97,7 +111,10 @@ def run_pipeline(user_query, request_id=None):
             }
             
             attempt_start = time.monotonic()
+            
+            # Multi-agent routing via router
             result = agent.analyze(analysis_context)
+            
             attempt_duration = int((time.monotonic() - attempt_start) * 1000)
             
             err_code = result.get("code", "UNKNOWN")
@@ -153,8 +170,8 @@ def run_pipeline(user_query, request_id=None):
 
         print("\nANALYSIS:")
         if result["status"] == "success":
-            for i, insight in enumerate(result["insights"], 1):
-                print(f"{i}. {insight}")
+            for insight in result["insights"]:
+                print(insight)
             return result["insights"]
         else:
             final_code = result.get("code", "ERROR")

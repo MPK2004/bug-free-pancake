@@ -34,7 +34,10 @@ dist/
 *.tmp
 *.swp
 
-# Files
+#Files
 EVOLUTION.md
 RULES.md
 test*.py
+verify*.py
+customer_shopping_data (1).csv
+1.ipynb

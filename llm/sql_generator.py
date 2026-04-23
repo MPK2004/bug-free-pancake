@@ -1,12 +1,33 @@
+import re
 from llm.client import call_llm
 
-def generate_sql(user_query, schema_str):
+def generate_sql(user_query, schema_str, mode="analytical"):
     """
     Constructs the prompt and calls the LLM to generate SQL.
     """
+    if mode == "strategic":
+        instructions = """
+1. STRATEGIC MODE:
+    - DO NOT use LIMIT 1.
+    - MANDATORY: Include `expected_yield`, `demand` (SUM(total_sales)), and `priority` (from category_insights).
+    - Aliases: `t` for tenants, `p` for proposals, `tr` for transactions, `ci` for category_insights.
+    - Standard join: proposals (p) -> tenants (t) -> malls (m).
+    - LEFT JOIN transactions (tr) and category_insights (ci) on category.
+"""
+    else:
+        instructions = """
+1. ANALYTICAL MODE:
+    - Primary table: `transactions` (alias `tr`).
+    - Use `tr.category` and `tr.shopping_mall` for filtering/grouping.
+    - Join `category_insights` (ci) ONLY if priority is needed.
+    - SQL Rule: COALESCE(MAX(ci.priority), 'UNKNOWN') AS priority.
+    - NEVER use alias `t` (tenants) unless explicitly asked for tenant-specific details.
+    - Dominance = highest SUM(tr.total_sales) only.
+"""
+
     messages = [
         {"role": "user", "content": f"""
-Convert the following natural language query into SQL for a mall leasing business intelligence system.
+Convert the following natural language query into SQL. 
 
 Schema:
 {schema_str}
@@ -14,70 +35,40 @@ Schema:
 User Question:
 {user_query}
 
-IMPORTANT RULES:
+Mode: {mode.upper()}
 
-1. STRATEGIC vs LOOKUP QUERIES:
-- **Strategic Queries** (e.g., "Which is the best fit?", "What do you recommend?", "Compare X and Y"):
-    - DO NOT use LIMIT 1. The decision engine needs all candidates to score them.
-    - HARD RULE: You MUST include `expected_yield`, `demand` (SUM of total_sales), and `priority` (from category_insights).
-    - Queries that only return names for strategic questions are INVALID.
-- **Lookup Queries** (e.g., "Show top 3", "Who has highest yield?"):
-    - Use LIMIT and ORDER BY as requested.
+SCALING RULES:
+{instructions}
 
-2. AGGREGATION & JOINS (FOR STRATEGIC QUERIES):
-- Always join `proposals` (p) with `tenants` (t) on `tenant_id`.
-- Always join `malls` (m) on `mall_id`.
-- Always LEFT JOIN `transactions` (tr) on `category` AND `shopping_mall` to get demand.
-- Always LEFT JOIN `category_insights` (ci) on `category` to get strategic priority.
-- Standardize naming: Always use `t.name AS tenant`.
-- **GROUP BY**: You must GROUP BY all non-aggregated columns.
-
-3. PERFORMANCE ANALYSIS:
-- Demand = SUM(tr.total_sales) from `transactions`.
-
-4. CASE HANDLING:
+3. CASE HANDLING:
 - Mall and Tenant names are in Proper Case (e.g., 'Mall of Istanbul', 'Zara').
 
-5. OUTPUT:
+4. OUTPUT:
 - Return ONLY SQL.
 
 GOOD EXAMPLES:
 
+Mode: STRATEGIC
 User Question: "Recommend a tenant for Kanyon mall"
 SQL:
-SELECT 
-    t.name AS tenant,
-    p.expected_yield,
-    SUM(tr.total_sales) AS demand,
-    MAX(ci.priority) AS priority
+SELECT t.name AS tenant, p.expected_yield, SUM(tr.total_sales) AS demand, MAX(ci.priority) AS priority
 FROM proposals p
 JOIN tenants t ON p.tenant_id = t.id
 JOIN malls m ON p.mall_id = m.id
-LEFT JOIN transactions tr 
-    ON tr.category = t.category 
-    AND tr.shopping_mall = m.name
-LEFT JOIN category_insights ci 
-    ON ci.category = t.category
+LEFT JOIN transactions tr ON tr.category = t.category AND tr.shopping_mall = m.name
+LEFT JOIN category_insights ci ON ci.category = t.category
 WHERE m.name = 'Kanyon'
 GROUP BY t.name, p.expected_yield;
 
-User Question: "Compare Zara and Nike at Mall of Istanbul. Which is better?"
+Mode: ANALYTICAL
+User Question: "Which category dominates Kanyon?"
 SQL:
-SELECT 
-    t.name AS tenant, 
-    p.expected_yield, 
-    SUM(tr.total_sales) AS demand,
-    MAX(ci.priority) AS priority
-FROM proposals p
-JOIN tenants t ON p.tenant_id = t.id
-JOIN malls m ON p.mall_id = m.id
-LEFT JOIN transactions tr 
-    ON tr.category = t.category 
-    AND tr.shopping_mall = m.name
-LEFT JOIN category_insights ci 
-    ON ci.category = t.category
-WHERE (t.name = 'Zara' OR t.name = 'Nike') AND m.name = 'Mall of Istanbul'
-GROUP BY t.name, p.expected_yield;
+SELECT tr.category AS dominant_category, SUM(tr.total_sales) AS demand, COALESCE(MAX(ci.priority), 'UNKNOWN') AS priority
+FROM transactions tr
+LEFT JOIN category_insights ci ON tr.category = ci.category
+WHERE tr.shopping_mall = 'Kanyon'
+GROUP BY tr.category
+ORDER BY demand DESC;
 """}
     ]
     
@@ -89,9 +80,31 @@ def parse_sql(sql_query):
     Cleans up the SQL query string returned by the LLM.
     """
     if "```sql" in sql_query:
-        sql_query = sql_query.split("```sql")[1].split("```")[0]
+        sql = sql_query.split("```sql")[1].split("```")[0]
     elif "```" in sql_query:
-        sql_query = sql_query.split("```")[1].split("```")[0]
+        sql = sql_query.split("```")[1].split("```")[0]
+    else:
+        sql = sql_query
         
-    sql_query = sql_query.replace("SQL:", "").strip()
-    return sql_query
+    # Remove common LLM labels if they leaked into the output
+    sql = re.sub(r'^(Mode|User Question|SQL):.*?\n', '', sql, flags=re.MULTILINE | re.IGNORECASE)
+    
+    # Find the first SELECT statement and use that as the starting point
+    select_match = re.search(r'SELECT\s+', sql, re.IGNORECASE)
+    if select_match:
+        sql = sql[select_match.start():]
+        
+    sql = sql.replace("SQL:", "").strip()
+    sql = re.sub(r'```.*$', '', sql)
+    
+    sql_lower = sql.lower()
+    
+    # Fix: If t.category is used but only transactions table is joined
+    if "t.category" in sql and ("transactions tr" in sql_lower or "transactions as tr" in sql_lower) and "tenants t" not in sql_lower:
+        sql = sql.replace("t.category", "tr.category")
+    
+    # Fix: Ambiguous 'name' in strategic queries (favor t.name if available)
+    if " name" in sql_lower and "tenants t" in sql_lower and " t.name" not in sql:
+        sql = sql.replace(" name", " t.name")
+
+    return sql.strip()
