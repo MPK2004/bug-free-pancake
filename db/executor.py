@@ -68,17 +68,6 @@ def fix_sql(sql):
     if " name" in sql_lower and "tenants t" in sql_lower and " t.name" not in sql:
         sql = sql.replace(" name", " t.name")
 
-    # ILLEGAL JOIN FIX: Catch mall_id = shopping_mall mismatch
-    if "mall_id = tr.shopping_mall" in sql_lower or "tr.shopping_mall = p.mall_id" in sql_lower or "tr.shopping_mall = mall_id" in sql_lower:
-        if "JOIN malls m" not in sql:
-            # Inject malls bridge
-            sql = sql.replace("JOIN transactions tr ON p.mall_id = tr.shopping_mall", 
-                              "JOIN malls m ON p.mall_id = m.id JOIN transactions tr ON tr.shopping_mall = m.name")
-            sql = sql.replace("JOIN transactions tr ON tr.shopping_mall = p.mall_id", 
-                              "JOIN malls m ON p.mall_id = m.id JOIN transactions tr ON tr.shopping_mall = m.name")
-            sql = sql.replace("JOIN transactions tr ON tr.shopping_mall = mall_id", 
-                              "JOIN malls m ON p.mall_id = m.id JOIN transactions tr ON tr.shopping_mall = m.name")
-
     return sql
 
 def execute_query(cursor, sql, timeout_ms=5000):

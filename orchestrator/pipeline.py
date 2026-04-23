@@ -51,13 +51,6 @@ def run_pipeline(user_query, request_id=None):
         for row in results:
             print(row)
 
-        if not results:
-            return {
-                "status": "success",
-                "insights": [f"Based on the database records, no results were found for: '{user_query}'."],
-                "meta": {"rows_used": 0, "request_id": request_id}
-            }
-
         columns = [desc[0] for desc in cursor.description]
         rows_list = [dict(zip(columns, row)) for row in results]
         

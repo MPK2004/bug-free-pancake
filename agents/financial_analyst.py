@@ -48,40 +48,15 @@ The dataset is already precomputed and contains the required metrics.
 STRICT RULES:
 - Use ONLY the dataset provided below.
 - DO NOT ask for more data.
-- DO NOT assume or invent missing fields.
-- GROUNDING: You MUST only use values (IDs, yields, demand) that actually exist in the DATASET. If a user asks for a hypothetical value (e.g., "negative demand"), inform them it is not in the data and use the available data instead.
+- DO NOT assume missing fields.
 - MANDATORY: If numerical computation is required (ranking, adjusted value, comparison), you MUST call a tool. NEVER calculate manually.
-- PROVIDE BUSINESS INSIGHTS: Explain WHY the top result is superior based on the tool results.
+- PROVIDE BUSINESS INSIGHTS: Explain WHY the top result is superior (e.g., mention demand, yield, or priority category).
 - If the dataset contains only one row but a comparison or ranking is required, inform the user that insufficient data is available for a comparative analysis.
 - If the dataset already contains the answer, summarize it directly.
 
 DATASET:
 {data_summary}
 """
-
-    def validate_grounding(arguments, raw_data):
-        """
-        Ensures that the LLM is only calling tools with data that exists in the DB results.
-        """
-        if not isinstance(arguments, dict) or "proposals_data" not in arguments:
-            return arguments
-            
-        proposals_in_args = arguments["proposals_data"]
-        valid_proposals = []
-        
-        # Create a lookup for fast validation (using proposal_id or id)
-        db_ids = {str(row.get('proposal_id') or row.get('id')) for row in raw_data}
-        
-        for p in proposals_in_args:
-            p_id = str(p.get('proposal_id') or p.get('id'))
-            if p_id in db_ids:
-                valid_proposals.append(p)
-            else:
-                if DEBUG:
-                    print(f"[warning] Rejecting hallucinated proposal ID: {p_id}", file=sys.stderr)
-        
-        arguments["proposals_data"] = valid_proposals
-        return arguments
 
     messages = [
         {"role": "system", "content": system_prompt},
@@ -130,13 +105,6 @@ DATASET:
                     arguments = json.loads(args_raw)
                     if not isinstance(arguments, dict):
                         raise ValueError("Arguments must be an object")
-                    
-                    # GROUNDING CHECK: Ensure LLM isn't inventing data
-                    arguments = validate_grounding(arguments, raw_data)
-                    
-                    if not arguments.get("proposals_data"):
-                        raise ValueError("Grounding check failed: No valid data points found in tool arguments.")
-
                 except Exception as e:
                     print(f"[tool] error parsing args: {e}", file=sys.stderr)
                     messages.append({
