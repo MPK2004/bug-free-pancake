@@ -24,7 +24,7 @@ def analyze(context: dict):
     Used for lookup queries (e.g., "Top categories", "Sales by mall").
     """
     start_time = time.monotonic()
-    user_query = context.get('user_query')
+    query = context.get('query')
     raw_data = context.get('data', [])
     request_id = context.get('request_id') or str(uuid.uuid4())
 
@@ -48,7 +48,7 @@ def analyze(context: dict):
     analysis_prompt = f"""
 Analyze the provided dataset to answer the user's analytical question. 
 
-User Question: {user_query}
+User Question: {query}
 
 DATASET:
 {data_summary}
