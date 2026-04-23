@@ -41,6 +41,19 @@ SCALING RULES:
 {instructions}
 - If the query involves comparison, ranking, or "highest/lowest" values: DO NOT use LIMIT and DO NOT use ORDER BY. Return all relevant rows without sorting bias for analysis.
 - DO NOT compute final metrics (like adjusted values or rankings) in SQL. Return the raw component fields (e.g., expected_yield, total_sales, priority) so the agent can perform the calculation via tools.
+- SCHEMA INTELLIGENCE (JOINS):
+    - proposals.mall_id MUST be joined with malls.id.
+    - transactions.shopping_mall MUST be joined with malls.name.
+    - JOIN proposals with transactions via malls: proposals p JOIN malls m ON p.mall_id = m.id JOIN transactions tr ON tr.shopping_mall = m.name.
+- TYPE SAFETY: NEVER compare numeric fields with strings. expected_yield is NUMERIC: HIGH > 4, MEDIUM = 2-4, LOW < 2.
+- SEMANTIC INTELLIGENCE (RELATIVE SCALING):
+    - "Low" / "Poor" / "High" metrics should be relative. Use subqueries to compare against averages.
+    - AGGREGATION CONSISTENCY: Always compare metrics at the same level. If the left side is SUM(total_sales) per proposal, the right side average MUST be an average of those sums (e.g., SELECT AVG(total_demand) FROM (SELECT SUM(...) GROUP BY ...)).
+    - NEVER use arbitrary constants (e.g., < 2) for qualitative terms.
+- FILTERING CONTEXT (WHERE vs HAVING):
+    - Use WHERE for row-level filters (e.g., p.mall_id = 1).
+    - Use HAVING for filters on aggregated results like SUM(total_sales) or COUNT(*). Demand is an aggregation.
+- REASONING SEPARATION: For "Why" or "Explain" queries, return the raw dataset and do NOT add complex SQL filtering logic.
 
 3. CASE HANDLING:
 - Mall and Tenant names are in Proper Case (e.g., 'Mall of Istanbul', 'Zara').
@@ -108,5 +121,14 @@ def parse_sql(sql_query):
     # Fix: Ambiguous 'name' in strategic queries (favor t.name if available)
     if " name" in sql_lower and "tenants t" in sql_lower and " t.name" not in sql:
         sql = sql.replace(" name", " t.name")
+
+    # VALIDATION LAYER: Catch and fix illegal joins
+    if "mall_id = tr.shopping_mall" in sql or "tr.shopping_mall = p.mall_id" in sql:
+        # Auto-fix: Inject malls bridge if missing
+        if "JOIN malls m" not in sql:
+            sql = sql.replace("JOIN transactions tr ON p.mall_id = tr.shopping_mall", 
+                              "JOIN malls m ON p.mall_id = m.id JOIN transactions tr ON tr.shopping_mall = m.name")
+            sql = sql.replace("JOIN transactions tr ON tr.shopping_mall = p.mall_id", 
+                              "JOIN malls m ON p.mall_id = m.id JOIN transactions tr ON tr.shopping_mall = m.name")
 
     return sql.strip()
