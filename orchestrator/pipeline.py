@@ -24,7 +24,12 @@ def run_pipeline(user_query, request_id=None):
     
     # 1. Intent Classification (The "Routing Brain")
     # Future optimization: combine classification + SQL generation in a single LLM call.
-    intent = router.classify_intent(user_query)
+    try:
+        intent = router.classify_intent(user_query)
+    except Exception as e:
+        print(f"[pipeline.error] Router failed: {e}. Falling back to GENERAL.")
+        intent = "GENERAL"
+    
     print(f"Detected intent: {intent}")
 
     rows_list = []

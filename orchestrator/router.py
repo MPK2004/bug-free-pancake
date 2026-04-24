@@ -1,5 +1,13 @@
+import time
+import json
+from collections import Counter
+from threading import Lock
 from agents import data_analyst, financial_analyst, general_responder
 from llm.client import call_llm
+
+# Thread-safe Intent Distribution Tracking
+INTENT_COUNTS = Counter({"DATA_ANALYSIS": 0, "FINANCIAL_ANALYSIS": 0, "GENERAL": 0})
+LOCK = Lock()
 
 def classify_intent(query: str) -> str:
     """
@@ -28,24 +36,56 @@ Rules:
 
 Query: {query}
 """
+    safe_query = query[:100].replace("\n", " ") + ("..." if len(query) > 100 else "")
+    start_time = time.monotonic()
+    
     try:
         response = call_llm([{"role": "user", "content": prompt}])
         intent = response.strip().upper()
         
-        # Enforce strict labels to prevent router breakage. We upper() and strip() 
-        # to handle LLM variations (e.g. "General." or "general") while maintaining
-        # compatibility with exact string comparisons in the route() function.
+        # Enforce strict labels to prevent router breakage.
         valid_intents = ["DATA_ANALYSIS", "FINANCIAL_ANALYSIS", "GENERAL"]
         if intent not in valid_intents:
-            # Fallback to DATA_ANALYSIS as the safest default for mall-related queries.
-            # This ensures that if the LLM produces a hallucinated label, the system
-            # still attempts to answer the user's question via the standard data layer.
-            return "DATA_ANALYSIS"
+            intent = "GENERAL"
+            source = "fallback"
+            reason = "invalid_label"
+        else:
+            source = "llm"
+            reason = None
+            
+        duration_ms = int((time.monotonic() - start_time) * 1000)
+        
+        with LOCK:
+            INTENT_COUNTS[intent] += 1
+            
+        log_payload = {
+            "event": "intent_classification",
+            "intent": intent,
+            "source": source,
+            "duration_ms": duration_ms,
+            "query_preview": safe_query,
+            "query_len": len(query)
+        }
+        if reason: log_payload["reason"] = reason
+        
+        print(json.dumps(log_payload))
         return intent
-    except Exception:
-        # Fallback to DATA_ANALYSIS ensures system continuity even during LLM provider
-        # downtime or request timeouts.
-        return "DATA_ANALYSIS"
+        
+    except Exception as e:
+        # Fallback to GENERAL is safer as it bypasses SQL entirely.
+        duration_ms = int((time.monotonic() - start_time) * 1000)
+        with LOCK:
+            INTENT_COUNTS["GENERAL"] += 1
+            
+        print(json.dumps({
+            "event": "intent_classification",
+            "intent": "GENERAL",
+            "source": "fallback",
+            "reason": f"exception:{str(e)}",
+            "duration_ms": duration_ms,
+            "query_preview": safe_query
+        }))
+        return "GENERAL"
 
 def route(query, results, intent=None):
     """
