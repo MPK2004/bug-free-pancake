@@ -9,10 +9,12 @@ def generate_sql(user_query, schema_str, mode="analytical"):
         instructions = """
 1. STRATEGIC MODE:
     - DO NOT use LIMIT 1.
-    - MANDATORY: Include `expected_yield`, `demand` (SUM(total_sales)), and `priority` (from category_insights).
-    - Aliases: `t` for tenants, `p` for proposals, `tr` for transactions, `ci` for category_insights.
-    - Standard join: proposals (p) -> tenants (t) -> malls (m).
-    - LEFT JOIN transactions (tr) and category_insights (ci) on category.
+    - MANDATORY: Include `expected_yield`, `demand` (COALESCE(SUM(total_sales), 0)), and `priority` (from category_insights).
+    - Aliases: `t` for tenants, `p` for proposals, `tr_agg` for aggregated transactions, `ci` for category_insights.
+    - JOIN proposals (p) -> tenants (t) -> malls (m).
+    - MATHEMATICAL INTEGRITY: Aggregate transactions in a SUBQUERY (or CTE) grouped by category and mall name. Use COALESCE(SUM(total_sales), 0) to handle categories with no transaction history.
+    - OUTER QUERY: DO NOT use GROUP BY in the outer query. Since the subquery and category_insights join 1:1 or N:1, grouping is redundant and can collapse distinct proposals.
+    - NULL HANDLING: Use COALESCE(tr_agg.demand, 0) and COALESCE(ci.priority, 'LOW') in the outer SELECT to ensure no NULLs reach the agent.
 """
     else:
         instructions = """
@@ -53,14 +55,17 @@ GOOD EXAMPLES:
 Mode: STRATEGIC
 User Question: "Recommend a tenant for Kanyon mall"
 SQL:
-SELECT t.name AS tenant, p.expected_yield, SUM(tr.total_sales) AS demand, MAX(ci.priority) AS priority
+SELECT t.name AS tenant, p.expected_yield, COALESCE(tr_agg.demand, 0) AS demand, COALESCE(ci.priority, 'LOW') AS priority
 FROM proposals p
 JOIN tenants t ON p.tenant_id = t.id
 JOIN malls m ON p.mall_id = m.id
-LEFT JOIN transactions tr ON tr.category = t.category AND tr.shopping_mall = m.name
+LEFT JOIN (
+    SELECT category, shopping_mall, SUM(total_sales) AS demand
+    FROM transactions
+    GROUP BY category, shopping_mall
+) tr_agg ON tr_agg.category = t.category AND tr_agg.shopping_mall = m.name
 LEFT JOIN category_insights ci ON ci.category = t.category
-WHERE m.name = 'Kanyon'
-GROUP BY t.name, p.expected_yield;
+WHERE m.name = 'Kanyon';
 
 Mode: ANALYTICAL
 User Question: "Which category dominates Kanyon?"
