@@ -23,16 +23,16 @@ def classify_intent(query: str) -> str:
     prompt = f"""
 Classify the user's query into ONE of the following categories:
 
-1. DATA_ANALYSIS → requires database queries (counts, filters, aggregations)
-2. FINANCIAL_ANALYSIS → requires calculations, comparisons, or financial metrics
-3. GENERAL → general knowledge, greetings, or questions about the system that don't require data.
+1. DATA_ANALYSIS → Use for specific data lookups, counting, filtering, or simple aggregations (e.g., "How many transactions?", "What category dominates?").
+2. FINANCIAL_ANALYSIS → Use for strategic decisions, recommendations, comparisons, or multi-metric evaluation (e.g., "Recommend a tenant", "Compare these malls").
+3. GENERAL → Use for conceptual explanations, greetings, general knowledge, or questions about how the system/business works without needing specific database rows (e.g., "Explain how malls make money", "Hi", "What do you do?").
 
 Rules:
-- If query involves numbers, calculations, or comparisons → FINANCIAL_ANALYSIS
-- If query involves counting, filtering, or database lookup → DATA_ANALYSIS
-- If query is general (e.g., "What is the capital of France?", "Hi", "Explain malls") → GENERAL
-- Do NOT explain
-- Return ONLY the label (e.g., FINANCIAL_ANALYSIS)
+- "Explain how..." or "Why does..." about business concepts → GENERAL
+- If the query requires finding the best option or ranking based on performance → FINANCIAL_ANALYSIS
+- If the query is a simple retrieval or count of data → DATA_ANALYSIS
+- Do NOT explain your choice.
+- Return ONLY the label (e.g., FINANCIAL_ANALYSIS).
 
 Query: {query}
 """
