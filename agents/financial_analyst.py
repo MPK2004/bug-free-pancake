@@ -31,6 +31,18 @@ def analyze(context: dict):
     raw_data = context.get('data', [])
     request_id = context.get('request_id') or str(uuid.uuid4())
     
+    # Early exit if no data is found to prevent LLM hallucination in tool-calling loop
+    if not raw_data:
+        return {
+            'status': 'success', 
+            'insights': ['No financial data found to analyze for this query.'], 
+            'meta': {
+                'request_id': request_id, 
+                'rows_used': 0, 
+                'duration_ms': int((time.monotonic() - start_time) * 1000)
+            }
+        }
+    
     # We might need both proposals and tenants. 
     # If the SQL query was generic, we might have mixed data or just one type.
     # Structured data for prompt
