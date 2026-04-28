@@ -7,6 +7,22 @@ DB_PORT = '5432'
 DB_NAME = 'testdb'
 engine = create_engine(f'postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}')
 
+def safe_float(value, default=0.0):
+    """
+    Defensively converts a value to float. 
+    Returns default if value is None, empty string, or non-numeric.
+    """
+    if value is None:
+        return default
+    try:
+        if isinstance(value, str):
+            value = value.strip()
+            if not value:
+                return default
+        return float(value)
+    except (ValueError, TypeError):
+        return default
+
 def load_data():
     tenants = pd.read_sql('SELECT * FROM tenants;', engine)
     proposals = pd.read_sql('SELECT * FROM proposals;', engine)
@@ -22,18 +38,15 @@ def financial_analysis(proposals_data: list) -> list:
     # Input Validation: Type and Range Checks
     valid_proposals = []
     for p in proposals_data:
-        try:
-            p['proposed_rent'] = float(p.get('proposed_rent', 0))
-            p['expected_sales'] = float(p.get('expected_sales', 0))
-            p['revenue_share'] = float(p.get('revenue_share', 0))
-            
-            if p['proposed_rent'] < 0 or p['expected_sales'] < 0 or p['revenue_share'] < 0:
-                print(f"[warning] Negative values detected in proposal: {p}", file=sys.stderr)
-            
-            valid_proposals.append(p)
-        except (ValueError, TypeError):
-            print(f"[warning] Skipping invalid proposal data: {p}", file=sys.stderr)
-            continue
+        # Use safe_float to prevent TypeError: float(None)
+        p['proposed_rent'] = safe_float(p.get('proposed_rent'), 0.0)
+        p['expected_sales'] = safe_float(p.get('expected_sales'), 0.0)
+        p['revenue_share'] = safe_float(p.get('revenue_share'), 0.0)
+        
+        if p['proposed_rent'] < 0 or p['expected_sales'] < 0 or p['revenue_share'] < 0:
+            print(f"[warning] Negative values detected in proposal: {p}", file=sys.stderr)
+        
+        valid_proposals.append(p)
 
     if not valid_proposals:
         return []
@@ -108,28 +121,51 @@ def calculate_adjusted_value(proposals_data: list) -> list:
     
     results = []
     for p in proposals_data:
-        try:
-            # Identity preservation: Capture tenant name
-            tenant = p.get('tenant', 'Unknown Tenant')
+        # Identity preservation: Always capture tenant name
+        tenant = p.get('tenant', 'Unknown Tenant')
+        
+        # DEFENSIVE CHECK: Detect explicit NULLs in critical fields before safe_float masks them
+        y_raw = p.get('expected_yield')
+        d_raw = p.get('demand', p.get('total_sales')) # fallback to total_sales if demand is missing
+        
+        if y_raw is None or d_raw is None:
+            missing = []
+            if y_raw is None: missing.append("expected_yield")
+            if d_raw is None: missing.append("demand")
             
-            p_yield = float(p.get('expected_yield', 1))
-            p_demand = float(p.get('demand', p.get('total_sales', 0)))
+            results.append({
+                'tenant': tenant,
+                'status': 'disqualified',
+                'error': f"Missing critical data: {', '.join(missing)} (SQL JOIN likely failed)",
+                'adjusted_value': -1.0 # Use -1 to ensure it sinks to the bottom during sort
+            })
+            continue
+
+        try:
+            p_yield = safe_float(y_raw, 1.0)
+            p_demand = safe_float(d_raw, 0.0)
             p_priority = str(p.get('priority', 'LOW')).upper()
             
             weight = PRIORITY_WEIGHTS.get(p_priority, 1)
             adjusted_value = p_yield * p_demand * weight
             
-            # Return enriched object with identity and computed value
             results.append({
                 'tenant': tenant,
                 'expected_yield': p_yield,
                 'demand': p_demand,
                 'priority': p_priority,
-                'adjusted_value': adjusted_value
+                'status': 'success',
+                'adjusted_value': float(adjusted_value)
             })
-        except (ValueError, TypeError):
-            continue
+        except Exception as e:
+            results.append({
+                'tenant': tenant,
+                'status': 'failed',
+                'error': str(e),
+                'adjusted_value': -1.0
+            })
             
+    # Sort by adjusted_value descending. Disqualified/Failed items (-1.0) will be at the end.
     return sorted(results, key=lambda x: x['adjusted_value'], reverse=True)
 
 
