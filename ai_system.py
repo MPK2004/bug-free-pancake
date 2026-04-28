@@ -97,6 +97,7 @@ def compare_proposals(proposals_data: list, tenants_data: list) -> dict:
 def calculate_adjusted_value(proposals_data: list) -> list:
     """
     Computes adjusted values using raw strategic metrics: expected_yield, demand, and priority.
+    Returns the results with the 'tenant' identifier echoed back to prevent mapping hallucinations.
     Formula: Adjusted Value = yield * demand * priority_weight
     Priority weights: HIGH=3, MEDIUM=2, LOW=1
     """
@@ -108,6 +109,9 @@ def calculate_adjusted_value(proposals_data: list) -> list:
     results = []
     for p in proposals_data:
         try:
+            # Identity preservation: Capture tenant name
+            tenant = p.get('tenant', 'Unknown Tenant')
+            
             p_yield = float(p.get('expected_yield', 1))
             p_demand = float(p.get('demand', p.get('total_sales', 0)))
             p_priority = str(p.get('priority', 'LOW')).upper()
@@ -115,12 +119,19 @@ def calculate_adjusted_value(proposals_data: list) -> list:
             weight = PRIORITY_WEIGHTS.get(p_priority, 1)
             adjusted_value = p_yield * p_demand * weight
             
-            p['adjusted_value'] = adjusted_value
-            results.append(p)
+            # Return enriched object with identity and computed value
+            results.append({
+                'tenant': tenant,
+                'expected_yield': p_yield,
+                'demand': p_demand,
+                'priority': p_priority,
+                'adjusted_value': adjusted_value
+            })
         except (ValueError, TypeError):
             continue
             
     return sorted(results, key=lambda x: x['adjusted_value'], reverse=True)
+
 
 TOOL_REGISTRY = {
     "financial_analysis": financial_analysis,

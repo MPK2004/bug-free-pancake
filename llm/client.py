@@ -18,7 +18,7 @@ class LLMRateLimitError(LLMError):
 class LLMOverloadError(LLMError):
     pass
 
-def call_llm(messages, model='openai/gpt-3.5-turbo', timeout=None, tools=None, raw=False):
+def call_llm(messages, model=os.getenv('LLM_MODEL'), timeout=None, tools=None, raw=False):
     # Maintain raw=False as default; existing agents (data_analyst.py, decision_engine.py)
     # expect a plain string response. raw=True is for tool-calling agents.
     url = 'https://openrouter.ai/api/v1/chat/completions'
