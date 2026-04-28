@@ -62,6 +62,7 @@ STRICT RULES:
 - DO NOT ask for more data.
 - DO NOT assume missing fields.
 - MANDATORY: If numerical computation is required (ranking, adjusted value, comparison), you MUST call a tool. NEVER calculate manually.
+- IDENTITY PRESERVATION: When calling tools (like `calculate_adjusted_value`), you MUST include the `tenant` identifier for each item. This ensures the output can be accurately mapped back to the correct brand.
 - PROVIDE BUSINESS INSIGHTS: Explain WHY the top result is superior (e.g., mention demand, yield, or priority category).
 - If the dataset contains only one row but a comparison or ranking is required, inform the user that insufficient data is available for a comparative analysis.
 - If the dataset already contains the answer, summarize it directly.
@@ -69,6 +70,7 @@ STRICT RULES:
 DATASET:
 {data_summary}
 """
+
 
     messages = [
         {"role": "system", "content": system_prompt},

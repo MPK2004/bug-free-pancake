@@ -61,10 +61,12 @@ FINANCIAL_TOOLS = [
                         "items": {
                             "type": "object",
                             "properties": {
+                                "tenant": {"type": "string", "description": "The name of the tenant or brand being evaluated."},
                                 "expected_yield": {"type": "number"},
                                 "demand": {"type": "number"},
                                 "priority": {"type": "string", "enum": ["HIGH", "MEDIUM", "LOW"]}
-                            }
+                            },
+                            "required": ["tenant", "expected_yield", "demand", "priority"]
                         },
                         "description": "List of proposals with raw strategic metrics."
                     }
@@ -73,4 +75,5 @@ FINANCIAL_TOOLS = [
             }
         }
     }
+
 ]
