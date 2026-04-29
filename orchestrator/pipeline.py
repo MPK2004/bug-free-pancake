@@ -18,12 +18,16 @@ def get_analysis_mode(intent):
 
 def run_pipeline(user_query, request_id=None):
     """
-    Orchestrates the NL-to-SQL-to-Analysis pipeline with backoff-enabled recovery.
+    Orchestrates the NL-to-SQL-to-Analysis pipeline with a Multi-Model Cascade.
     """
     pipeline_start = time.monotonic()
     
+    # Load model configuration
+    FAST_MODEL = os.getenv("FAST_LLM_MODEL")
+    SMART_MODEL = os.getenv("SMART_LLM_MODEL")
+    
     # 1. Intent Classification (The "Routing Brain")
-    # Future optimization: combine classification + SQL generation in a single LLM call.
+    # Strictly uses FAST_MODEL to minimize overhead.
     try:
         intent = router.classify_intent(user_query)
     except Exception as e:
@@ -32,9 +36,18 @@ def run_pipeline(user_query, request_id=None):
     
     print(f"Detected intent: {intent}")
 
+    # 2. Multi-Model Cascade Decision
+    # Cognitive Alignment: The model for SQL and Analysis mirrors the task complexity.
+    if intent == "FINANCIAL_ANALYSIS":
+        active_model = SMART_MODEL
+    else:
+        active_model = FAST_MODEL
+        
+    print(f"Active model for cascade: {active_model}")
+
     rows_list = []
     
-    # 2. Data Acquisition (Skip if GENERAL)
+    # 3. Data Acquisition (Skip if GENERAL)
     if intent != "GENERAL":
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -42,7 +55,8 @@ def run_pipeline(user_query, request_id=None):
             schema_str = format_schema(get_schema(cursor))
             analysis_mode = get_analysis_mode(intent)
             
-            sql_query = generate_sql(user_query, schema_str, mode=analysis_mode)
+            # Explicitly pass the active_model to SQL generation
+            sql_query = generate_sql(user_query, schema_str, mode=analysis_mode, model=active_model)
             print(f"\nGenerated SQL: {sql_query}")
 
             sql_query = fix_case(sql_query)
@@ -62,7 +76,7 @@ def run_pipeline(user_query, request_id=None):
     else:
         print("Skipping SQL generation for GENERAL intent.")
 
-    # 3. Agent Selection & Analysis Loop
+    # 4. Agent Selection & Analysis Loop
     agent = router.route(user_query, rows_list, intent=intent)
     print(f"Selected agent: {agent.NAME}")
 
@@ -77,9 +91,9 @@ def run_pipeline(user_query, request_id=None):
     CIRCUIT_THRESHOLD = 5
     CIRCUIT_RESET_WINDOW = 60
     
+    # Circuit breaker key now includes the specific model in the cascade
     provider = "openrouter"
-    model = os.getenv("LLM_MODEL", "gpt-3.5-turbo")
-    cb_key = f"{provider}:{model}"
+    cb_key = f"{provider}:{active_model}"
     
     if cb_key not in run_pipeline._circuit_states:
         run_pipeline._circuit_states[cb_key] = {"failures": 0, "last_failure": 0, "state": "CLOSED"}
@@ -112,6 +126,7 @@ def run_pipeline(user_query, request_id=None):
             }
             break
 
+        # Inject the active model into the context for the agent to consume
         analysis_context = {
             "query": user_query, 
             "data": rows_list, 
@@ -119,7 +134,7 @@ def run_pipeline(user_query, request_id=None):
             "attempt": attempt, 
             "deadline_s": DEADLINE_SECONDS, 
             "remaining_s": remaining_s,
-            "model": model, 
+            "model": active_model, 
             "region": os.getenv("LLM_REGION", "auto")
         }
         

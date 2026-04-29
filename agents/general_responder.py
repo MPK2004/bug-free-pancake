@@ -8,10 +8,12 @@ NAME = "General Responder"
 def analyze(context: dict):
     """
     General Responder: Handles non-data queries like greetings, general knowledge, or system explanations.
+    Explicitly uses the model provided in the context.
     """
     start_time = time.monotonic()
     query = context.get('query')
     request_id = context.get('request_id') or str(uuid.uuid4())
+    model = context.get('model')
 
     system_prompt = """
 You are a helpful assistant for the Mall Leasing AI system. 
@@ -23,13 +25,14 @@ If the user asks something that seems like it might need data, but you were rout
         response = call_llm([
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": query}
-        ])
+        ], model=model)
         
         insights = [line.strip() for line in response.split('\n') if line.strip()]
         
         meta = {
             'request_id': request_id,
-            'duration_ms': int((time.monotonic() - start_time) * 1000)
+            'duration_ms': int((time.monotonic() - start_time) * 1000),
+            'model': model
         }
 
         return {'status': 'success', 'insights': insights, 'meta': meta}

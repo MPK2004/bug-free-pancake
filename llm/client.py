@@ -18,9 +18,14 @@ class LLMRateLimitError(LLMError):
 class LLMOverloadError(LLMError):
     pass
 
-def call_llm(messages, model=os.getenv('LLM_MODEL'), timeout=None, tools=None, raw=False):
-    # Maintain raw=False as default; existing agents (data_analyst.py, decision_engine.py)
-    # expect a plain string response. raw=True is for tool-calling agents.
+def call_llm(messages, model=None, timeout=None, tools=None, raw=False):
+    # Dependency Injection: Model selection is owned by the orchestrator.
+    # Fallback to FAST_LLM_MODEL if no explicit model is provided.
+    if not model:
+        model = os.getenv('FAST_LLM_MODEL')
+        if not model:
+            model = "google/gemini-2.0-flash-001" # Safe hard fallback
+    
     url = 'https://openrouter.ai/api/v1/chat/completions'
     headers = {
         'Authorization': f'Bearer {os.getenv("OPENROUTER_API_KEY")}', 

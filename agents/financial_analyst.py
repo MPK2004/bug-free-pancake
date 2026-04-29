@@ -25,11 +25,13 @@ def redact(s: str) -> str:
 def analyze(context: dict):
     """
     Financial Analyst: Specialized in financial calculations via tool-calling loop.
+    Explicitly uses the model injected by the orchestrator.
     """
     start_time = time.monotonic()
     query = context.get('query')
     raw_data = context.get('data', [])
     request_id = context.get('request_id') or str(uuid.uuid4())
+    model = context.get('model')
     
     # Early exit if no data is found to prevent LLM hallucination in tool-calling loop
     if not raw_data:
@@ -43,8 +45,6 @@ def analyze(context: dict):
             }
         }
     
-    # We might need both proposals and tenants. 
-    # If the SQL query was generic, we might have mixed data or just one type.
     # Structured data for prompt
     data_summary = json.dumps(raw_data[:20], indent=2)
 
@@ -71,7 +71,6 @@ DATASET:
 {data_summary}
 """
 
-
     messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": f"User Query: {query}"}
@@ -85,19 +84,18 @@ DATASET:
             if DEBUG:
                 print(f"--- Financial Analyst Loop Step {step+1} ---", file=sys.stderr)
 
-            # 1. Call LLM with tools
+            # 1. Call LLM with tools and the explicit model
             response = call_llm(
                 messages, 
                 tools=FINANCIAL_TOOLS, 
                 raw=True, 
-                timeout=30
+                timeout=30,
+                model=model
             )
             
             response_message = response['choices'][0]['message']
             
             # 2. MANDATORY: Append assistant message to history.
-            # Without this, the LLM loses the tool_calls context in the next turn,
-            # causing the tool results to be ignored or causing API errors.
             messages.append(response_message)
             
             tool_calls = response_message.get("tool_calls", [])
@@ -162,7 +160,8 @@ DATASET:
             'request_id': request_id,
             'rows_used': rows_count,
             'duration_ms': int((time.monotonic() - start_time) * 1000),
-            'steps_taken': step + 1
+            'steps_taken': step + 1,
+            'model': model
         }
 
         return {'status': 'success', 'insights': insights, 'meta': meta}

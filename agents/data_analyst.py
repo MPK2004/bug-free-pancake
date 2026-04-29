@@ -27,6 +27,7 @@ def analyze(context: dict):
     query = context.get('query')
     raw_data = context.get('data', [])
     request_id = context.get('request_id') or str(uuid.uuid4())
+    model = context.get('model')
 
     if not raw_data:
         return {'status': 'success', 'insights': ['No data found to aggregate.'], 'meta': {'rows_used': 0}}
@@ -75,15 +76,15 @@ INSIGHT:
 CONCLUSION:
 (Direct answer to the user's query)
 """
-    return _execute_llm_analysis(analysis_prompt, start_time, request_id, len(raw_data))
+    return _execute_llm_analysis(analysis_prompt, start_time, request_id, len(raw_data), model=model)
 
-def _execute_llm_analysis(prompt, start_time, request_id, rows_count):
+def _execute_llm_analysis(prompt, start_time, request_id, rows_count, model=None):
     if DEBUG:
         print(f'--- Executing Data Analyst (Analytical Mode) ---', file=sys.stderr)
         print(redact(prompt), file=sys.stderr)
 
     try:
-        response = call_llm([{'role': 'user', 'content': prompt}], timeout=20)
+        response = call_llm([{'role': 'user', 'content': prompt}], timeout=20, model=model)
         insights = [line.strip() for line in response.split('\n') if line.strip()]
         
         meta = {

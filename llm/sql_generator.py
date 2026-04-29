@@ -1,9 +1,10 @@
 import re
 from llm.client import call_llm
 
-def generate_sql(user_query, schema_str, mode="analytical"):
+def generate_sql(user_query, schema_str, mode="analytical", model=None):
     """
     Constructs the prompt and calls the LLM to generate SQL.
+    Explicitly uses the provided model to ensure cognitive alignment with the intent.
     """
     if mode == "strategic":
         instructions = """
@@ -79,7 +80,7 @@ ORDER BY demand DESC;
 """}
     ]
     
-    response_text = call_llm(messages)
+    response_text = call_llm(messages, model=model)
     return parse_sql(response_text)
 
 def parse_sql(sql_query):
