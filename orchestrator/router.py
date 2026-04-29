@@ -1,5 +1,6 @@
 import time
 import json
+import os
 from collections import Counter
 from threading import Lock
 from agents import data_analyst, financial_analyst, general_responder
@@ -16,9 +17,7 @@ def classify_intent(query: str) -> str:
     2. FINANCIAL_ANALYSIS -> calculations, comparisons, or financial metrics
     3. GENERAL -> general knowledge, explanations, or greeting
 
-    Strict Rules:
-    - Return ONLY the label.
-    - No punctuation, no explanation.
+    Strictly uses the FAST_LLM_MODEL to minimize latency for routing.
     """
     prompt = f"""
 Classify the user's query into ONE of the following categories:
@@ -42,8 +41,11 @@ Query: {query}
     safe_query = query[:100].replace("\n", " ") + ("..." if len(query) > 100 else "")
     start_time = time.monotonic()
     
+    # Cascade: Routing always uses the FAST model.
+    fast_model = os.getenv("FAST_LLM_MODEL")
+    
     try:
-        response = call_llm([{"role": "user", "content": prompt}])
+        response = call_llm([{"role": "user", "content": prompt}], model=fast_model)
         intent = response.strip().upper()
         
         # Enforce strict labels to prevent router breakage.
@@ -65,6 +67,7 @@ Query: {query}
             "event": "intent_classification",
             "intent": intent,
             "source": source,
+            "model": fast_model,
             "duration_ms": duration_ms,
             "query_preview": safe_query,
             "query_len": len(query)
@@ -85,6 +88,7 @@ Query: {query}
             "intent": "GENERAL",
             "source": "fallback",
             "reason": f"exception:{str(e)}",
+            "model": fast_model,
             "duration_ms": duration_ms,
             "query_preview": safe_query
         }))
