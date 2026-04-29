@@ -61,6 +61,11 @@ def call_llm(messages, model=None, timeout=None, tools=None, raw=False):
         full_response = response.json()
         if raw:
             return full_response
+            
+        if 'choices' not in full_response:
+            print(f"[ERROR] LLM Response missing 'choices': {full_response}")
+            raise LLMError(f"Unexpected LLM response format: {full_response}")
+            
         return full_response['choices'][0]['message'].get('content', '')
         
     except requests.exceptions.Timeout:

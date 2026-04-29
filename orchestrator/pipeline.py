@@ -52,11 +52,11 @@ def run_pipeline(user_query, request_id=None):
         conn = get_db_connection()
         cursor = conn.cursor()
         try:
-            schema_str = format_schema(get_schema(cursor))
+            schema_dict = get_schema(cursor)
             analysis_mode = get_analysis_mode(intent)
             
-            # Explicitly pass the active_model to SQL generation
-            sql_query = generate_sql(user_query, schema_str, mode=analysis_mode, model=active_model)
+            # Pass the raw schema_dict to allow for dynamic pruning inside generate_sql
+            sql_query = generate_sql(user_query, schema_dict, mode=analysis_mode, model=active_model)
             print(f"\nGenerated SQL: {sql_query}")
 
             sql_query = fix_case(sql_query)

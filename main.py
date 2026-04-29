@@ -1,8 +1,14 @@
 import sys
 import uuid
 from orchestrator.pipeline import run_pipeline
+from db.schema import DOMAIN_CONFIG
 
 def main():
+    if not DOMAIN_CONFIG:
+        print("CRITICAL ERROR: domain_config.json not found or invalid. System cannot start.")
+        sys.exit(1)
+    
+    print(f"System initialized for domain: {DOMAIN_CONFIG.get('domain_name', 'Unknown')}")
     try:
         user_query = input('Enter your question: ')
         if not user_query:
