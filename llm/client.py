@@ -24,7 +24,7 @@ def call_llm(messages, model=None, timeout=None, tools=None, raw=False):
     if not model:
         model = os.getenv('FAST_LLM_MODEL')
         if not model:
-            model = "google/gemini-2.0-flash-001" # Safe hard fallback
+            model = "openai/gpt-oss-20b:free" # Safe hard fallback
     
     url = 'https://openrouter.ai/api/v1/chat/completions'
     headers = {
