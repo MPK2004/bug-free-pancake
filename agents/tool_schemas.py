@@ -52,7 +52,7 @@ FINANCIAL_TOOLS = [
         "type": "function",
         "function": {
             "name": "calculate_adjusted_value",
-            "description": "Computes adjusted values using raw strategic metrics: expected_yield, demand (sales), and priority. Use this for ranking proposals strategically.",
+            "description": "Computes adjusted values using raw strategic metrics. Use this for ranking entities based on domain-specific metrics.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -61,12 +61,14 @@ FINANCIAL_TOOLS = [
                         "items": {
                             "type": "object",
                             "properties": {
-                                "tenant": {"type": "string", "description": "The name of the tenant or brand being evaluated."},
-                                "expected_yield": {"type": "number"},
-                                "demand": {"type": "number"},
-                                "priority": {"type": "string", "enum": ["HIGH", "MEDIUM", "LOW"]}
+                                "entity_identifier": {"type": "string", "description": "The unique name or ID of the entity being evaluated."},
+                                "metrics": {
+                                    "type": "object",
+                                    "description": "Dictionary of raw metrics (e.g., yield, demand, priority) required for the calculation.",
+                                    "additionalProperties": {"type": ["number", "string"]}
+                                }
                             },
-                            "required": ["tenant", "expected_yield", "demand", "priority"]
+                            "required": ["entity_identifier", "metrics"]
                         },
                         "description": "List of proposals with raw strategic metrics."
                     }

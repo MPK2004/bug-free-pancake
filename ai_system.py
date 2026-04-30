@@ -1,5 +1,63 @@
 import pandas as pd
+import ast
+import operator
+import math
 from sqlalchemy import create_engine
+from db.schema import DOMAIN_CONFIG
+
+class SafeEvaluator:
+    """
+    A secure mathematical expression evaluator using AST.
+    Avoids eval() to prevent RCE vulnerabilities.
+    """
+    def __init__(self):
+        self.operators = {
+            ast.Add: operator.add,
+            ast.Sub: operator.sub,
+            ast.Mult: operator.mul,
+            ast.Div: operator.truediv,
+            ast.Pow: operator.pow,
+            ast.USub: operator.neg
+        }
+        self.functions = {
+            'log': math.log,
+            'sqrt': math.sqrt,
+            'max': max,
+            'min': min
+        }
+
+    def evaluate(self, expression, context):
+        """
+        Parses and evaluates a math string safely.
+        """
+        try:
+            node = ast.parse(expression, mode='eval').body
+            return self._eval(node, context)
+        except Exception as e:
+            raise ValueError(f"Invalid or unsafe expression: {expression}. Error: {e}")
+
+    def _eval(self, node, context):
+        if isinstance(node, ast.Num):
+            return node.n
+        elif isinstance(node, ast.Constant): # Python 3.8+
+            return node.value
+        elif isinstance(node, ast.BinOp):
+            return self.operators[type(node.op)](self._eval(node.left, context), self._eval(node.right, context))
+        elif isinstance(node, ast.UnaryOp):
+            return self.operators[type(node.op)](self._eval(node.operand, context))
+        elif isinstance(node, ast.Name):
+            if node.id in context:
+                return context[node.id]
+            raise NameError(f"Variable '{node.id}' not allowed in this context.")
+        elif isinstance(node, ast.Call):
+            func_name = node.func.id
+            if func_name in self.functions:
+                args = [self._eval(arg, context) for arg in node.args]
+                return self.functions[func_name](*args)
+            raise NameError(f"Function '{func_name}' is not whitelisted.")
+        else:
+            raise TypeError(f"Unsupported AST node: {type(node)}")
+
 DB_USER = 'postgres'
 DB_PASSWORD = '100724'
 DB_HOST = '127.0.0.1'
@@ -109,64 +167,59 @@ def compare_proposals(proposals_data: list, tenants_data: list) -> dict:
 
 def calculate_adjusted_value(proposals_data: list) -> list:
     """
-    Computes adjusted values using raw strategic metrics: expected_yield, demand, and priority.
-    Returns the results with the 'tenant' identifier echoed back to prevent mapping hallucinations.
-    Formula: Adjusted Value = yield * demand * priority_weight
-    Priority weights: HIGH=3, MEDIUM=2, LOW=1
+    Computes adjusted values using raw strategic metrics from the 'metrics' dictionary.
+    Identity Preservation: Returns 'entity_identifier'.
+    Logic is driven by DOMAIN_CONFIG.
     """
     if not proposals_data:
         return []
     
-    PRIORITY_WEIGHTS = {'HIGH': 3, 'MEDIUM': 2, 'LOW': 1}
+    tool_config = DOMAIN_CONFIG.get("tools", {}).get("calculate_adjusted_value", {})
+    priority_weights = tool_config.get("priority_weights", {})
+    default_priority = tool_config.get("default_priority", "LOW")
+    formula = tool_config.get("formula", "expected_yield * demand * priority_weight")
     
+    evaluator = SafeEvaluator()
     results = []
     for p in proposals_data:
-        # Identity preservation: Always capture tenant name
-        tenant = p.get('tenant', 'Unknown Tenant')
+        identifier = p.get('entity_identifier', 'Unknown Entity')
+        metrics = p.get('metrics', {})
         
-        # DEFENSIVE CHECK: Detect explicit NULLs in critical fields before safe_float masks them
-        y_raw = p.get('expected_yield')
-        d_raw = p.get('demand', p.get('total_sales')) # fallback to total_sales if demand is missing
+        # Extract metrics based on config
+        p_yield = safe_float(metrics.get('expected_yield', metrics.get('yield')), 1.0)
+        p_demand = safe_float(metrics.get('demand', metrics.get('total_sales')), 0.0)
+        p_priority = str(metrics.get('priority', default_priority)).upper()
         
-        if y_raw is None or d_raw is None:
-            missing = []
-            if y_raw is None: missing.append("expected_yield")
-            if d_raw is None: missing.append("demand")
-            
-            results.append({
-                'tenant': tenant,
-                'status': 'disqualified',
-                'error': f"Missing critical data: {', '.join(missing)} (SQL JOIN likely failed)",
-                'adjusted_value': -1.0 # Use -1 to ensure it sinks to the bottom during sort
-            })
-            continue
-
+        weight = priority_weights.get(p_priority, 1)
+        
+        # Build evaluation context
+        context = {
+            'expected_yield': p_yield,
+            'yield': p_yield,
+            'demand': p_demand,
+            'total_sales': p_demand,
+            'priority_weight': weight,
+            'weight': weight
+        }
+        
         try:
-            p_yield = safe_float(y_raw, 1.0)
-            p_demand = safe_float(d_raw, 0.0)
-            p_priority = str(p.get('priority', 'LOW')).upper()
-            
-            weight = PRIORITY_WEIGHTS.get(p_priority, 1)
-            adjusted_value = p_yield * p_demand * weight
+            adjusted_value = evaluator.evaluate(formula, context)
             
             results.append({
-                'tenant': tenant,
-                'expected_yield': p_yield,
-                'demand': p_demand,
-                'priority': p_priority,
+                'entity_identifier': identifier,
+                'metrics': metrics,
                 'status': 'success',
                 'adjusted_value': float(adjusted_value)
             })
         except Exception as e:
             results.append({
-                'tenant': tenant,
+                'entity_identifier': identifier,
+                'metrics': metrics,
                 'status': 'failed',
-                'error': str(e),
-                'adjusted_value': -1.0
+                'error': f"Formula evaluation failed: {e}"
             })
             
-    # Sort by adjusted_value descending. Disqualified/Failed items (-1.0) will be at the end.
-    return sorted(results, key=lambda x: x['adjusted_value'], reverse=True)
+    return sorted(results, key=lambda x: x.get('adjusted_value', -1.0), reverse=True)
 
 
 TOOL_REGISTRY = {

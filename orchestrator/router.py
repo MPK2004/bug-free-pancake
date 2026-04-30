@@ -23,13 +23,13 @@ def classify_intent(query: str) -> str:
 Classify the user's query into ONE of the following categories:
 
 1. DATA_ANALYSIS → Use for specific data lookups, counting, or filtering (e.g., "How many transactions?").
-2. FINANCIAL_ANALYSIS → Use for strategic decisions, recommendations, or comparisons involving specific entities (e.g., "Recommend a tenant", "Compare Starbucks and Zara").
+2. FINANCIAL_ANALYSIS → Use for strategic decisions, recommendations, comparisons involving specific entities, or calculating strategic/adjusted values for proposals (e.g., "Recommend a tenant", "Calculate strategic value for proposals").
 3. GENERAL → Use for conceptual explanations, greetings, or questions about how the business/system works WITHOUT needing specific database rows (e.g., "How does revenue share work?", "Explain yield").
 
-Hierarchy & Routing Rules:
-- DATA TRUMPS CONCEPT (Priority 1): If the query contains specific entities (e.g., "Starbucks", "Mall A") AND requires their data to be answered, it MUST be FINANCIAL_ANALYSIS/DATA_ANALYSIS, even if it uses "Explain" or "Why" (e.g., "Explain why Zara has better sales than Nike").
-- VERB OVER NOUN (Priority 2): If the query is conceptual and lacks specific entities, verbs like "Explain", "How", or "Why" take precedence over financial nouns. These questions are GENERAL (e.g., "Explain what yield means").
-- If the query is a simple retrieval or count of data → DATA_ANALYSIS
+- STRATEGIC CALCULATION (Priority 1): If the query asks to calculate "strategic value", "adjusted value", or "ranking scores" for proposals, it MUST be FINANCIAL_ANALYSIS, even if it uses "Calculate" or "Compute".
+- DATA TRUMPS CONCEPT (Priority 2): If the query contains specific entities (e.g., "Starbucks", "Mall A") AND requires their data to be answered, it MUST be FINANCIAL_ANALYSIS/DATA_ANALYSIS.
+- VERB OVER NOUN (Priority 3): If the query is conceptual and lacks specific entities, verbs like "Explain", "How", or "Why" take precedence over financial nouns. These questions are GENERAL.
+- If the query is a simple retrieval, count, or basic mathematical operation on raw transaction data → DATA_ANALYSIS
 
 Negative Constraints:
 - Do NOT classify conceptual questions as FINANCIAL_ANALYSIS just because they mention metrics like "yield" or "revenue share".
