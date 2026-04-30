@@ -7,6 +7,23 @@ from db.schema import get_schema, format_schema
 from db.executor import is_safe_sql, enforce_limit, fix_case, execute_query
 from llm.sql_generator import generate_sql
 from orchestrator import router
+from orchestrator.memory import ConversationHistory
+
+def extract_entities(rows):
+    """
+    Extracts key identifiers (mall names, brand names) from database rows
+    to anchor the data context for future turns.
+    """
+    if not rows:
+        return []
+    
+    identity_keys = {"tenant", "shopping_mall", "category", "brand", "entity_identifier", "dominant_category"}
+    entities = set()
+    for row in rows[:10]: # Check top results for context
+        for k, v in row.items():
+            if k.lower() in identity_keys and v:
+                entities.add(str(v))
+    return list(entities)
 
 def get_analysis_mode(intent):
     """
@@ -16,10 +33,14 @@ def get_analysis_mode(intent):
         return "strategic"
     return "analytical"
 
-def run_pipeline(user_query, request_id=None):
+def run_pipeline(user_query, request_id=None, history=None):
     """
     Orchestrates the NL-to-SQL-to-Analysis pipeline with a Multi-Model Cascade.
+    Now supports persistent conversational memory.
     """
+    if history is None:
+        history = ConversationHistory()
+        
     pipeline_start = time.monotonic()
     
     # Load model configuration
@@ -28,8 +49,9 @@ def run_pipeline(user_query, request_id=None):
     
     # 1. Intent Classification (The "Routing Brain")
     # Strictly uses FAST_MODEL to minimize overhead.
+    # Passes truncated history to maintain local context (e.g. for "Why?").
     try:
-        intent = router.classify_intent(user_query)
+        intent = router.classify_intent(user_query, history=history.get_truncated(3))
     except Exception as e:
         print(f"[pipeline.error] Router failed: {e}. Falling back to GENERAL.")
         intent = "GENERAL"
@@ -56,7 +78,8 @@ def run_pipeline(user_query, request_id=None):
             analysis_mode = get_analysis_mode(intent)
             
             # Pass the raw schema_dict to allow for dynamic pruning inside generate_sql
-            sql_query = generate_sql(user_query, schema_dict, mode=analysis_mode, model=active_model)
+            # Injects clean history (synthetic context) for pronoun resolution.
+            sql_query = generate_sql(user_query, schema_dict, mode=analysis_mode, model=active_model, history=history.get_clean_history())
             print(f"\nGenerated SQL: {sql_query}")
 
             sql_query = fix_case(sql_query)
@@ -126,10 +149,11 @@ def run_pipeline(user_query, request_id=None):
             }
             break
 
-        # Inject the active model into the context for the agent to consume
+        # Inject the active model and full history into the context for the agent to consume
         analysis_context = {
             "query": user_query, 
             "data": rows_list, 
+            "history": history.get_full(),
             "request_id": request_id,
             "attempt": attempt, 
             "deadline_s": DEADLINE_SECONDS, 
@@ -180,8 +204,16 @@ def run_pipeline(user_query, request_id=None):
 
     print("\nANALYSIS:")
     if result["status"] == "success":
+        # Final Step: Update history with the assistant response and extracted entities
+        # This anchors the 'Data Context' for the next turn's pronoun resolution.
+        entities = extract_entities(rows_list)
+        history.append("user", user_query)
+        history.append("assistant", "\n".join(result["insights"]), entities=entities)
+        
         for insight in result["insights"]:
             print(insight)
         return result["insights"]
     else:
+        # User query is still appended even on failure to maintain turn count
+        history.append("user", user_query)
         return result.get("message", "Analysis failed.")

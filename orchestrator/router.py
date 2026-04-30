@@ -10,7 +10,7 @@ from llm.client import call_llm
 INTENT_COUNTS = Counter({"DATA_ANALYSIS": 0, "FINANCIAL_ANALYSIS": 0, "GENERAL": 0})
 LOCK = Lock()
 
-def classify_intent(query: str) -> str:
+def classify_intent(query: str, history: list = None) -> str:
     """
     Classifies the user's query into ONE of the following categories:
     1. DATA_ANALYSIS -> database queries (counts, filters, aggregations)
@@ -19,13 +19,23 @@ def classify_intent(query: str) -> str:
 
     Strictly uses the FAST_LLM_MODEL to minimize latency for routing.
     """
+    history_context = ""
+    if history:
+        history_context = "RECENT CONVERSATION:\n"
+        for msg in history:
+            role = msg['role'].upper()
+            content = msg['content'][:200] # Truncate for router speed
+            history_context += f"{role}: {content}\n"
+        history_context += "\n"
+
     prompt = f"""
-Classify the user's query into ONE of the following categories:
+{history_context}Classify the user's query into ONE of the following categories:
 
 1. DATA_ANALYSIS → Use for specific data lookups, counting, or filtering (e.g., "How many transactions?").
 2. FINANCIAL_ANALYSIS → Use for strategic decisions, recommendations, comparisons involving specific entities, or calculating strategic/adjusted values for proposals (e.g., "Recommend a tenant", "Calculate strategic value for proposals").
 3. GENERAL → Use for conceptual explanations, greetings, or questions about how the business/system works WITHOUT needing specific database rows (e.g., "How does revenue share work?", "Explain yield").
 
+- FOLLOW-UPS: If the query is a follow-up (e.g., "Why?", "How about them?"), use the RECENT CONVERSATION above to determine the intent of the thread.
 - STRATEGIC CALCULATION (Priority 1): If the query asks to calculate "strategic value", "adjusted value", or "ranking scores" for proposals, it MUST be FINANCIAL_ANALYSIS, even if it uses "Calculate" or "Compute".
 - DATA TRUMPS CONCEPT (Priority 2): If the query contains specific entities (e.g., "Starbucks", "Mall A") AND requires their data to be answered, it MUST be FINANCIAL_ANALYSIS/DATA_ANALYSIS.
 - VERB OVER NOUN (Priority 3): If the query is conceptual and lacks specific entities, verbs like "Explain", "How", or "Why" take precedence over financial nouns. These questions are GENERAL.
