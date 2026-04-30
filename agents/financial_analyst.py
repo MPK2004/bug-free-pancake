@@ -71,10 +71,14 @@ DATASET:
 {data_summary}
 """
 
+    history = context.get('history', [])
+    
     messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": f"User Query: {query}"}
+        {"role": "system", "content": system_prompt}
     ]
+    if history:
+        messages.extend(history)
+    messages.append({"role": "user", "content": f"User Query: {query}"})
 
     MAX_STEPS = 3
     rows_count = len(raw_data)
