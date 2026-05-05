@@ -158,6 +158,10 @@ DATASET:
         
         # Final response is the last content from the LLM
         final_content = messages[-1].get("content", "")
+        if not final_content and messages[-1].get("tool_calls"):
+            # This shouldn't happen after the loop breaks, but defensively:
+            final_content = "Analysis completed via tools."
+
         insights = [line.strip() for line in final_content.split('\n') if line.strip()]
         
         meta = {

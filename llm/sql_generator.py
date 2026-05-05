@@ -1,9 +1,10 @@
 import re
 import json
+import os
 from llm.client import call_llm
 from db.schema import DOMAIN_CONFIG, get_table_summaries, format_schema
 
-def select_relevant_tables(user_query, mode="analytical", model=None):
+def select_relevant_tables(user_query, mode="analytical", model=None, history=None):
     """
     Step 1: Fast LLM identifies relevant tables based on summaries and relationships.
     Ensures intermediate join tables are selected via relationship metadata.
@@ -13,6 +14,10 @@ def select_relevant_tables(user_query, mode="analytical", model=None):
     
     config = DOMAIN_CONFIG.get("sql_generation", {}).get(mode, {})
     mode_instructions = config.get("instructions", "")
+    
+    messages = []
+    if history:
+        messages.extend(history)
     
     prompt = f"""
 Given the following database tables and their relationships, identify the tables needed to answer the user's query.
@@ -33,7 +38,7 @@ User Query: "{user_query}"
 
 Response format: ["table1", "table2"]
 """
-    messages = [{"role": "user", "content": prompt}]
+    messages.append({"role": "user", "content": prompt})
     response = call_llm(messages, model=model)
     
     try:
@@ -45,11 +50,11 @@ Response format: ["table1", "table2"]
     except:
         return []
 
-def generate_sql(user_query, schema_data, mode="analytical", model=None):
+def generate_sql(user_query, schema_data, mode="analytical", model=None, history=None):
     """
     Constructs the prompt and calls the LLM to generate SQL.
     If schema_data is a dict (raw schema), it performs dynamic pruning.
-    If it's a string, it uses it directly (legacy support).
+    Now supports history for pronoun resolution.
     """
     # Dynamic Schema Pruning
     selected_tables = None
@@ -57,7 +62,7 @@ def generate_sql(user_query, schema_data, mode="analytical", model=None):
         # Only prune if there are many tables (e.g., > 4 for this small demo, or 10+ for real world)
         if len(schema_data) > 4:
             print(f"[sql_generator] Large schema detected ({len(schema_data)} tables). Pruning...")
-            selected_tables = select_relevant_tables(user_query, mode=mode, model=model)
+            selected_tables = select_relevant_tables(user_query, mode=mode, model=model, history=history)
             print(f"[sql_generator] Selected tables: {selected_tables}")
         
         schema_str = format_schema(schema_data, selected_tables=selected_tables)
@@ -71,9 +76,15 @@ def generate_sql(user_query, schema_data, mode="analytical", model=None):
     for ex in examples:
         example_str += f"\nMode: {ex.get('mode')}\nUser Question: \"{ex.get('question')}\"\nSQL:\n{ex.get('sql')}\n"
 
-    messages = [
-        {"role": "user", "content": f"""
-Convert the following natural language query into SQL. 
+    messages = []
+    if history:
+        messages.extend(history)
+
+    messages.append({
+        "role": "user", "content": f"""
+Convert the following natural language query into a DATA RETRIEVAL SQL query. 
+
+CRITICAL: You are a DATA RETRIEVER, not a decision-maker. Your ONLY job is to fetch the raw data that a downstream Python agent will analyze using its own tools and formulas. 
 
 Schema:
 {schema_str}
@@ -85,19 +96,24 @@ Mode: {mode.upper()}
 
 SCALING RULES:
 {instructions}
-- If the query involves comparison, ranking, or "highest/lowest" values: DO NOT use LIMIT and DO NOT use ORDER BY. Return all relevant rows without sorting bias for analysis.
-- DO NOT compute final metrics (like adjusted values or rankings) in SQL. Return the raw component fields (e.g., expected_yield, total_sales, priority) so the agent can perform the calculation via tools.
 
-3. CASE HANDLING:
+RETRIEVAL BOUNDARY (MUST FOLLOW):
+- NEVER attempt to determine "best", "top", "winner", or rankings in SQL. The downstream agent has Python tools (e.g., calculate_adjusted_value) that use formulas NOT available to SQL.
+- NEVER use subqueries with MAX(), MIN(), RANK(), or ROW_NUMBER() to filter by business metrics like expected_yield, demand, or strategic value.
+- NEVER use WHERE clauses that pre-solve the user's question (e.g., WHERE yield = (SELECT MAX(yield)...)). 
+- Instead, fetch ALL relevant rows with their raw component fields (expected_yield, demand, priority) so the agent can compute rankings.
+- If the user asks about a specific entity (e.g., "where does Zara rank highest?"), fetch ALL proposals involving that entity across all relevant malls. Do NOT pre-filter by ranking logic.
+
+CASE HANDLING:
 - Mall and Tenant names are in Proper Case (e.g., 'Mall of Istanbul', 'Zara').
 
-4. OUTPUT:
+OUTPUT:
 - Return ONLY SQL.
 
 GOOD EXAMPLES:
 {example_str}
-"""}
-    ]
+"""})
+
     
     response_text = call_llm(messages, model=model)
     return parse_sql(response_text)

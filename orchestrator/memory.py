@@ -5,10 +5,11 @@ class ConversationHistory:
     Manages the persistent state of the conversation.
     Handles selective context injection for different pipeline nodes.
     """
-    def __init__(self):
+    def __init__(self, max_turns=20):
         self.messages = []
-        # Store metadata per turn to enable deterministic context injection
-        self.turn_metadata = []
+        # The session snapshot stores the compressed Narrative + Data Ledger
+        self.snapshot = None
+        self.max_turns = max_turns
 
     def append(self, role, content, entities=None):
         """
@@ -23,9 +24,14 @@ class ConversationHistory:
     def get_full(self):
         """
         Returns the full conversation history for Analyst Agents.
+        Prepends the session snapshot (if it exists) to maintain long-term memory.
         """
-        # Return a copy to prevent accidental mutation
-        return [dict(m) for m in self.messages]
+        full_history = []
+        if self.snapshot:
+            full_history.append({"role": "system", "content": f"SESSION SNAPSHOT (Historical Context):\n{self.snapshot}"})
+        
+        full_history.extend([dict(m) for m in self.messages])
+        return full_history
 
     def get_truncated(self, limit=3):
         """
@@ -53,5 +59,23 @@ class ConversationHistory:
                 clean_msgs.append({"role": "assistant", "content": content})
         return clean_msgs
 
+    def compact(self, model=None):
+        """
+        Triggered when messages exceed max_turns.
+        Moves the oldest 10 messages into the recursive snapshot.
+        """
+        if len(self.messages) <= self.max_turns:
+            return
+
+        print(f"[memory] History limit reached ({len(self.messages)} turns). Compacting...")
+        
+        # Take the oldest 10 messages to compress
+        to_compact = self.messages[:10]
+        self.messages = self.messages[10:]
+        
+        from llm.summarizer import summarize_history
+        self.snapshot = summarize_history(to_compact, current_snapshot=self.snapshot, model=model)
+        print("[memory] Compaction complete.")
+
     def __repr__(self):
-        return f"ConversationHistory(turns={len(self.messages)})"
+        return f"ConversationHistory(turns={len(self.messages)}, has_snapshot={self.snapshot is not None})"
