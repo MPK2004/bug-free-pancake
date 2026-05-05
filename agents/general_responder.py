@@ -21,11 +21,14 @@ You provide direct, concise answers to general questions that do not require dat
 If the user asks something that seems like it might need data, but you were routed here, answer as best as you can without hallucinating specific database values.
 """
 
+    messages = context.get('history', [])
+    if not messages:
+        messages = [{"role": "system", "content": system_prompt}]
+    
+    messages.append({"role": "user", "content": query})
+
     try:
-        response = call_llm([
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": query}
-        ], model=model)
+        response = call_llm(messages, model=model)
         
         insights = [line.strip() for line in response.split('\n') if line.strip()]
         

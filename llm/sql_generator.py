@@ -11,7 +11,7 @@ def select_relevant_tables(user_query, mode="analytical", model=None):
     summaries = get_table_summaries()
     summaries_str = json.dumps(summaries, indent=2)
     
-    config = DOMAIN_CONFIG.get("sql_generation", {}).get(mode, {})
+    config = (DOMAIN_CONFIG or {}).get("sql_generation", {}).get(mode, {})
     mode_instructions = config.get("instructions", "")
     
     prompt = f"""
@@ -45,7 +45,7 @@ Response format: ["table1", "table2"]
     except:
         return []
 
-def generate_sql(user_query, schema_data, mode="analytical", model=None):
+def generate_sql(user_query, schema_data, history=None, mode="analytical", model=None, feedback=None):
     """
     Constructs the prompt and calls the LLM to generate SQL.
     If schema_data is a dict (raw schema), it performs dynamic pruning.
@@ -63,7 +63,7 @@ def generate_sql(user_query, schema_data, mode="analytical", model=None):
         schema_str = format_schema(schema_data, selected_tables=selected_tables)
     else:
         schema_str = schema_data
-    config = DOMAIN_CONFIG.get("sql_generation", {}).get(mode, {})
+    config = (DOMAIN_CONFIG or {}).get("sql_generation", {}).get(mode, {})
     instructions = config.get("instructions", "No instructions provided for this mode.")
     examples = config.get("examples", [])
     
@@ -71,8 +71,31 @@ def generate_sql(user_query, schema_data, mode="analytical", model=None):
     for ex in examples:
         example_str += f"\nMode: {ex.get('mode')}\nUser Question: \"{ex.get('question')}\"\nSQL:\n{ex.get('sql')}\n"
 
+    history_str = ""
+    if history:
+        history_str = "### CONTEXT HISTORY (Pronoun Resolution) ###\n"
+        for msg in history:
+            history_str += f"{msg['role'].upper()}: {msg['content']}\n"
+        history_str += "\n"
+
+    feedback_str = ""
+    if feedback:
+        feedback_str = f"""
+### PREVIOUS ATTEMPT FAILED ###
+The following SQL was generated but failed execution:
+{feedback.get('previous_sql', '')}
+
+ERROR COMPLAINT:
+{feedback.get('error', '')}
+
+FIX THE ERROR above and return the corrected SQL. Pay attention to scoping, table aliases, and column names.
+"""
+
     messages = [
+        {"role": "system", "content": "You are an expert SQL generator. Use the context history to resolve pronouns like 'they', 'it', or 'previous'. If provided with feedback, fix the error in the previous query."},
         {"role": "user", "content": f"""
+{history_str}
+{feedback_str}
 Convert the following natural language query into SQL. 
 
 Schema:

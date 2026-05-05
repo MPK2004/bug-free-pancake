@@ -76,15 +76,17 @@ INSIGHT:
 CONCLUSION:
 (Direct answer to the user's query)
 """
-    return _execute_llm_analysis(analysis_prompt, start_time, request_id, len(raw_data), model=model)
+    messages = context.get('history', [])
+    messages.append({"role": "user", "content": analysis_prompt})
+    
+    return _execute_llm_analysis(messages, start_time, request_id, len(raw_data), model=model)
 
-def _execute_llm_analysis(prompt, start_time, request_id, rows_count, model=None):
+def _execute_llm_analysis(messages, start_time, request_id, rows_count, model=None):
     if DEBUG:
         print(f'--- Executing Data Analyst (Analytical Mode) ---', file=sys.stderr)
-        print(redact(prompt), file=sys.stderr)
 
     try:
-        response = call_llm([{'role': 'user', 'content': prompt}], timeout=20, model=model)
+        response = call_llm(messages, timeout=20, model=model)
         insights = [line.strip() for line in response.split('\n') if line.strip()]
         
         meta = {

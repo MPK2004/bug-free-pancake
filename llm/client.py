@@ -56,17 +56,25 @@ def call_llm(messages, model=None, timeout=None, tools=None, raw=False):
             raise LLMRateLimitError('Rate limit exceeded (429).', status_code=429)
         elif response.status_code in [503, 504]:
             raise LLMOverloadError(f'Service unavailable ({response.status_code}).', status_code=response.status_code)
+        print(f"RAW API STATUS: {response.status_code}")
+        if response.status_code != 200:
+            print(f"RAW API RESPONSE: {response.text}")
         response.raise_for_status()
         
         full_response = response.json()
         if raw:
             return full_response
             
-        if 'choices' not in full_response:
-            print(f"[ERROR] LLM Response missing 'choices': {full_response}")
+        if 'choices' not in full_response or not full_response['choices']:
+            print(f"[ERROR] LLM Response missing 'choices' or empty: {full_response}")
             raise LLMError(f"Unexpected LLM response format: {full_response}")
             
-        return full_response['choices'][0]['message'].get('content', '')
+        message = full_response['choices'][0].get('message')
+        if message is None:
+            print(f"[ERROR] LLM Response choice message is null: {full_response}")
+            return "" # Return empty string instead of crashing
+            
+        return message.get('content', '') or ""
         
     except requests.exceptions.Timeout:
         raise LLMError('Request timed out.', status_code=408)

@@ -71,10 +71,11 @@ DATASET:
 {data_summary}
 """
 
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": f"User Query: {query}"}
-    ]
+    messages = context.get('history', [])
+    if not messages:
+        messages = [{"role": "system", "content": system_prompt}]
+    
+    messages.append({"role": "user", "content": f"User Query: {query}"})
 
     MAX_STEPS = 3
     rows_count = len(raw_data)
@@ -93,7 +94,14 @@ DATASET:
                 model=model
             )
             
-            response_message = response['choices'][0]['message']
+            if not response or 'choices' not in response or not response['choices']:
+                print(f"[agent.error] LLM response missing choices: {response}", file=sys.stderr)
+                break
+
+            response_message = response['choices'][0].get('message')
+            if response_message is None:
+                print("[agent.error] LLM response message is null", file=sys.stderr)
+                break
             
             # 2. MANDATORY: Append assistant message to history.
             messages.append(response_message)

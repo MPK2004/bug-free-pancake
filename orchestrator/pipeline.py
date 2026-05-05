@@ -7,6 +7,7 @@ from db.schema import get_schema, format_schema
 from db.executor import is_safe_sql, enforce_limit, fix_case, execute_query
 from llm.sql_generator import generate_sql
 from orchestrator import router
+from orchestrator.memory import ConversationHistory
 
 def get_analysis_mode(intent):
     """
@@ -16,7 +17,7 @@ def get_analysis_mode(intent):
         return "strategic"
     return "analytical"
 
-def run_pipeline(user_query, request_id=None):
+def run_pipeline(user_query, history=None, request_id=None):
     """
     Orchestrates the NL-to-SQL-to-Analysis pipeline with a Multi-Model Cascade.
     """
@@ -27,9 +28,10 @@ def run_pipeline(user_query, request_id=None):
     SMART_MODEL = os.getenv("SMART_LLM_MODEL")
     
     # 1. Intent Classification (The "Routing Brain")
-    # Strictly uses FAST_MODEL to minimize overhead.
+    # Uses truncated history for context-aware routing (pronoun resolution).
     try:
-        intent = router.classify_intent(user_query)
+        clean_history = history.get_clean_history() if history else []
+        intent = router.classify_intent(user_query, history=clean_history)
     except Exception as e:
         print(f"[pipeline.error] Router failed: {e}. Falling back to GENERAL.")
         intent = "GENERAL"
@@ -55,19 +57,49 @@ def run_pipeline(user_query, request_id=None):
             schema_dict = get_schema(cursor)
             analysis_mode = get_analysis_mode(intent)
             
-            # Pass the raw schema_dict to allow for dynamic pruning inside generate_sql
-            sql_query = generate_sql(user_query, schema_dict, mode=analysis_mode, model=active_model)
-            print(f"\nGenerated SQL: {sql_query}")
+            # Pass history for pronoun resolution in SQL generation
+            truncated_history = history.get_truncated() if history else []
+            sql_query = generate_sql(user_query, schema_dict, history=truncated_history, mode=analysis_mode, model=active_model)
+            
+            MAX_SQL_ATTEMPTS = 2
+            results = None
+            sql_to_execute = sql_query
 
-            sql_query = fix_case(sql_query)
-            final_sql = enforce_limit(sql_query)
+            for sql_attempt in range(MAX_SQL_ATTEMPTS):
+                try:
+                    # Clean and Enforce
+                    final_sql = fix_case(sql_to_execute)
+                    final_sql = enforce_limit(final_sql)
 
-            if not is_safe_sql(final_sql):
-                print("Error: Generated SQL is not safe.")
-                return "Error: Insecure query generated."
+                    if not is_safe_sql(final_sql):
+                        raise Exception("Insecure SQL generated.")
 
-            print(f"Executing SQL: {final_sql}")
-            results = execute_query(cursor, final_sql)
+                    print(f"Executing SQL (Attempt {sql_attempt + 1}): {final_sql}")
+                    results = execute_query(cursor, final_sql)
+                    break # Success!
+                except Exception as e:
+                    last_error = str(e)
+                    print(f"SQL Execution Failed: {last_error}")
+                    
+                    if sql_attempt < MAX_SQL_ATTEMPTS - 1:
+                        print("Attempting agentic self-correction...")
+                        feedback = {
+                            "error": last_error,
+                            "previous_sql": sql_to_execute
+                        }
+                        sql_to_execute = generate_sql(
+                            user_query, 
+                            schema_dict, 
+                            history=truncated_history, 
+                            mode=analysis_mode, 
+                            model=active_model,
+                            feedback=feedback
+                        )
+                    else:
+                        raise e # Out of attempts
+
+            if results is None:
+                raise Exception("SQL Acquisition failed after multiple attempts.")
             
             columns = [desc[0] for desc in cursor.description]
             rows_list = [dict(zip(columns, row)) for row in results]
@@ -126,10 +158,11 @@ def run_pipeline(user_query, request_id=None):
             }
             break
 
-        # Inject the active model into the context for the agent to consume
+        # Inject context and history for the agent
         analysis_context = {
             "query": user_query, 
             "data": rows_list, 
+            "history": history.get_full() if history else [],
             "request_id": request_id,
             "attempt": attempt, 
             "deadline_s": DEADLINE_SECONDS, 
@@ -140,6 +173,11 @@ def run_pipeline(user_query, request_id=None):
         
         attempt_start = time.monotonic()
         result = agent.analyze(analysis_context)
+        
+        if result is None:
+            print(f"[pipeline.error] Agent {agent.NAME} returned None result.", file=sys.stderr)
+            result = {"status": "error", "message": "Agent returned null result.", "code": "AGENT_NULL"}
+            
         attempt_duration = int((time.monotonic() - attempt_start) * 1000)
         
         err_code = result.get("code", "UNKNOWN")
@@ -179,9 +217,21 @@ def run_pipeline(user_query, request_id=None):
         result["meta"]["total_duration_ms"] = int((time.monotonic() - pipeline_start) * 1000)
 
     print("\nANALYSIS:")
+    final_output = ""
     if result["status"] == "success":
-        for insight in result["insights"]:
-            print(insight)
+        final_output = "\n".join(result["insights"])
+        print(final_output)
+        
+        # 5. Persist to History & Compact
+        if history:
+            # We append the final response to the history
+            history.append("assistant", final_output)
+            # Check for compaction
+            history.compact(model=FAST_MODEL)
+            
         return result["insights"]
     else:
-        return result.get("message", "Analysis failed.")
+        final_output = result.get("message", "Analysis failed.")
+        if history:
+            history.append("assistant", f"ERROR: {final_output}")
+        return final_output

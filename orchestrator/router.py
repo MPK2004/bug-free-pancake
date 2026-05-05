@@ -10,7 +10,7 @@ from llm.client import call_llm
 INTENT_COUNTS = Counter({"DATA_ANALYSIS": 0, "FINANCIAL_ANALYSIS": 0, "GENERAL": 0})
 LOCK = Lock()
 
-def classify_intent(query: str) -> str:
+def classify_intent(query: str, history=None) -> str:
     """
     Classifies the user's query into ONE of the following categories:
     1. DATA_ANALYSIS -> database queries (counts, filters, aggregations)
@@ -19,7 +19,12 @@ def classify_intent(query: str) -> str:
 
     Strictly uses the FAST_LLM_MODEL to minimize latency for routing.
     """
+    history_str = ""
+    if history:
+        history_str = "CONTEXT HISTORY (Last 3 turns):\n" + json.dumps(history, indent=2) + "\n\n"
+
     prompt = f"""
+{history_str}
 Classify the user's query into ONE of the following categories:
 
 1. DATA_ANALYSIS → Use for specific data lookups, counting, or filtering (e.g., "How many transactions?").
@@ -94,14 +99,14 @@ Query: {query}
         }))
         return "GENERAL"
 
-def route(query, results, intent=None):
+def route(query, results, intent=None, history=None):
     """
     Decides which agent should handle the query based on classified intent.
     Returns the agent module.
     """
     # If intent is not passed, classify it (though pipeline should handle this)
     if not intent:
-        intent = classify_intent(query)
+        intent = classify_intent(query, history=history)
 
     if intent == "FINANCIAL_ANALYSIS":
         return financial_analyst

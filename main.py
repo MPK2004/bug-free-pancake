@@ -1,26 +1,101 @@
 import sys
 import uuid
+import os
 from orchestrator.pipeline import run_pipeline
+from orchestrator.memory import ConversationHistory
+from db.db_manager import DBManager
 from db.schema import DOMAIN_CONFIG
+
+def print_help():
+    print("\n--- Commands ---")
+    print("/new  - Start a new conversation thread")
+    print("/list - List your historical chats")
+    print("/load <thread_id> - Load a specific thread")
+    print("/help - Show this help message")
+    print("/exit - Exit the application")
+    print("----------------\n")
 
 def main():
     if not DOMAIN_CONFIG:
         print("CRITICAL ERROR: domain_config.json not found or invalid. System cannot start.")
         sys.exit(1)
     
+    db_manager = DBManager()
+    user_id = "default_user" # In a real app, this would be the logged-in user
+    
+    # Initialize session
+    thread_id = str(uuid.uuid4())
+    db_manager.create_thread(thread_id, user_id, title="New Chat")
+    history = ConversationHistory(thread_id=thread_id, db_manager=db_manager)
+    
     print(f"System initialized for domain: {DOMAIN_CONFIG.get('domain_name', 'Unknown')}")
-    try:
-        user_query = input('Enter your question: ')
-        if not user_query:
-            print('No question entered. Exiting.')
-            return
-        request_id = str(uuid.uuid4())
-        run_pipeline(user_query, request_id=request_id)
-    except KeyboardInterrupt:
-        print('\nExiting...')
-        sys.exit(0)
-    except Exception as e:
-        print(f'An error occurred: {e}')
-        sys.exit(1)
+    print(f"Active Thread: {thread_id}")
+    print_help()
+
+    while True:
+        try:
+            user_query = input('\n> ')
+            if not user_query.strip():
+                continue
+            
+            # Handle Commands
+            if user_query.startswith("/"):
+                cmd = user_query.split()[0].lower()
+                if cmd == "/exit":
+                    break
+                elif cmd == "/new":
+                    thread_id = str(uuid.uuid4())
+                    db_manager.create_thread(thread_id, user_id, title="New Chat")
+                    history = ConversationHistory(thread_id=thread_id, db_manager=db_manager)
+                    print(f"Started new thread: {thread_id}")
+                    continue
+                elif cmd == "/list":
+                    threads = db_manager.get_user_threads(user_id)
+                    print("\n--- Your Chats ---")
+                    for t in threads:
+                        print(f"[{t['id'][:8]}] {t['title']} ({t['created_at']})")
+                    continue
+                elif cmd == "/load":
+                    parts = user_query.split()
+                    if len(parts) < 2:
+                        print("Usage: /load <thread_id_prefix>")
+                        continue
+                    prefix = parts[1]
+                    threads = db_manager.get_user_threads(user_id)
+                    match = [t for t in threads if t['id'].startswith(prefix)]
+                    if not match:
+                        print("Thread not found.")
+                    else:
+                        thread_id = match[0]['id']
+                        history = ConversationHistory(thread_id=thread_id, db_manager=db_manager)
+                        print(f"Loaded thread: {thread_id}")
+                        # Print last few messages
+                        for m in history.get_clean_history(5):
+                            print(f"{m['role'].upper()}: {m['content'][:100]}...")
+                    continue
+                elif cmd == "/help":
+                    print_help()
+                    continue
+                else:
+                    print("Unknown command. Type /help for assistance.")
+                    continue
+
+            # Append user query to history
+            history.append("user", user_query)
+            
+            # Run Pipeline
+            request_id = str(uuid.uuid4())
+            run_pipeline(user_query, history=history, request_id=request_id)
+            
+        except (KeyboardInterrupt, EOFError):
+            print('\nExiting...')
+            break
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            print(f'An error occurred: {e}')
+            # Don't exit, just continue the loop
+            continue
+
 if __name__ == '__main__':
     main()
