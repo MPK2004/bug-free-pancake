@@ -129,7 +129,7 @@ def run_pipeline(user_query, request_id=None, history=None):
     # 1. Planning Step
     yield {"event": "planning", "status": "Decomposing query into tasks..."}
     try:
-        tasks = router.plan_tasks(user_query, history=history.get_truncated(3))
+        tasks = router.plan_tasks(user_query, history=history.get_router_history(limit=3))
     except Exception as e:
         tasks = [{"intent": "GENERAL", "sub_query": user_query}]
     
@@ -153,7 +153,7 @@ def run_pipeline(user_query, request_id=None, history=None):
         
         # Anchor entities to history for next turn/step resolution
         entities = extract_entities(rows_list)
-        history.append("assistant", step_insights, entities=entities)
+        history.append("assistant", step_insights, entities=entities, intent=intent)
         
         full_results.append(step_insights)
         

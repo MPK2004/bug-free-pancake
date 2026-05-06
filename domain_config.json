@@ -21,7 +21,7 @@
       }
     },
     "rental_agreements": {
-      "description": "Table tracking active lease agreements between tenants and malls.",
+      "description": "Table tracking ACTIVE lease agreements between tenants and malls. Use this for questions about current occupancy or existing tenants.",
       "relationships": "Links to 'tenants' (tenant_id) and 'malls' (mall_id).",
       "columns": {
         "id": "Unique identifier for the agreement.",
@@ -35,7 +35,7 @@
       }
     },
     "proposals": {
-      "description": "Table containing new business proposals mapping tenants to malls.",
+      "description": "Table containing NEW business proposals for PLANNED leases. Use this for questions about potential tenants, upcoming deals, or where a brand is 'proposed'.",
       "relationships": "Links to 'tenants' (tenant_id) and 'malls' (mall_id).",
       "columns": {
         "id": "Unique identifier for the proposal.",
@@ -90,7 +90,7 @@
       ]
     },
     "analytical": {
-      "instructions": "1. ANALYTICAL MODE:\n    - Primary table: `transactions` (alias `tr`).\n    - CONTEXT RULE: Always include `tr.category` and `tr.shopping_mall` in the SELECT clause to preserve conversational context.\n    - Use `tr.category` and `tr.shopping_mall` for filtering/grouping.\n    - Join `category_insights` (ci) ONLY if priority is needed.\n    - SQL Rule: COALESCE(MAX(ci.priority), 'UNKNOWN') AS priority.\n    - NEVER use alias `t` (tenants) unless explicitly asked for tenant-specific details.\n    - Dominance = highest SUM(tr.total_sales) only.",
+      "instructions": "1. ANALYTICAL MODE:\n    - Primary table: `transactions` (alias `tr`) for sales analysis.\n    - For tenant lookups: Use `rental_agreements` for active tenants or `proposals` for planned tenants. Join `tenants` (t) and `malls` (m) as needed.\n    - CONTEXT RULE: Always include `tr.category` and `tr.shopping_mall` in the SELECT clause IF querying transactions.\n    - Use `tr.category` and `tr.shopping_mall` for filtering/grouping.\n    - Join `category_insights` (ci) ONLY if priority is needed.\n    - SQL Rule: COALESCE(MAX(ci.priority), 'UNKNOWN') AS priority.\n    - Dominance = highest SUM(tr.total_sales) only.",
       "examples": [
         {
           "mode": "ANALYTICAL",
