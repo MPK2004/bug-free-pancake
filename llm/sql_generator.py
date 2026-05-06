@@ -1,9 +1,10 @@
 import re
 import json
+import os
 from llm.client import call_llm
 from db.schema import DOMAIN_CONFIG, get_table_summaries, format_schema
 
-def select_relevant_tables(user_query, mode="analytical", model=None):
+def select_relevant_tables(user_query, mode="analytical", model=None, history=None):
     """
     Step 1: Fast LLM identifies relevant tables based on summaries and relationships.
     Ensures intermediate join tables are selected via relationship metadata.
@@ -13,6 +14,11 @@ def select_relevant_tables(user_query, mode="analytical", model=None):
     
     config = (DOMAIN_CONFIG or {}).get("sql_generation", {}).get(mode, {})
     mode_instructions = config.get("instructions", "")
+    
+    messages = []
+    if history:
+        # Use a subset of history for table selection to avoid noise
+        messages.extend(history[-2:])
     
     prompt = f"""
 Given the following database tables and their relationships, identify the tables needed to answer the user's query.
@@ -33,7 +39,7 @@ User Query: "{user_query}"
 
 Response format: ["table1", "table2"]
 """
-    messages = [{"role": "user", "content": prompt}]
+    messages.append({"role": "user", "content": prompt})
     response = call_llm(messages, model=model)
     
     try:
@@ -48,21 +54,21 @@ Response format: ["table1", "table2"]
 def generate_sql(user_query, schema_data, history=None, mode="analytical", model=None, feedback=None):
     """
     Constructs the prompt and calls the LLM to generate SQL.
-    If schema_data is a dict (raw schema), it performs dynamic pruning.
-    If it's a string, it uses it directly (legacy support).
+    Supports history for pronoun resolution and feedback for self-correction.
     """
     # Dynamic Schema Pruning
     selected_tables = None
     if isinstance(schema_data, dict):
-        # Only prune if there are many tables (e.g., > 4 for this small demo, or 10+ for real world)
+        # Prune if schema is large
         if len(schema_data) > 4:
             print(f"[sql_generator] Large schema detected ({len(schema_data)} tables). Pruning...")
-            selected_tables = select_relevant_tables(user_query, mode=mode, model=model)
+            selected_tables = select_relevant_tables(user_query, mode=mode, model=model, history=history)
             print(f"[sql_generator] Selected tables: {selected_tables}")
         
         schema_str = format_schema(schema_data, selected_tables=selected_tables)
     else:
         schema_str = schema_data
+
     config = (DOMAIN_CONFIG or {}).get("sql_generation", {}).get(mode, {})
     instructions = config.get("instructions", "No instructions provided for this mode.")
     examples = config.get("examples", [])
@@ -70,13 +76,6 @@ def generate_sql(user_query, schema_data, history=None, mode="analytical", model
     example_str = ""
     for ex in examples:
         example_str += f"\nMode: {ex.get('mode')}\nUser Question: \"{ex.get('question')}\"\nSQL:\n{ex.get('sql')}\n"
-
-    history_str = ""
-    if history:
-        history_str = "### CONTEXT HISTORY (Pronoun Resolution) ###\n"
-        for msg in history:
-            history_str += f"{msg['role'].upper()}: {msg['content']}\n"
-        history_str += "\n"
 
     feedback_str = ""
     if feedback:
@@ -91,12 +90,15 @@ ERROR COMPLAINT:
 FIX THE ERROR above and return the corrected SQL. Pay attention to scoping, table aliases, and column names.
 """
 
-    messages = [
-        {"role": "system", "content": "You are an expert SQL generator. Use the context history to resolve pronouns like 'they', 'it', or 'previous'. If provided with feedback, fix the error in the previous query."},
-        {"role": "user", "content": f"""
-{history_str}
+    messages = []
+    if history:
+        messages.extend([dict(m) for m in history])
+
+    prompt = f"""
 {feedback_str}
-Convert the following natural language query into SQL. 
+Convert the following natural language query into a DATA RETRIEVAL SQL query. 
+
+CRITICAL: You are a DATA RETRIEVER, not a decision-maker. Your ONLY job is to fetch the raw data that a downstream Python agent will analyze using its own tools and formulas. 
 
 Schema:
 {schema_str}
@@ -108,19 +110,24 @@ Mode: {mode.upper()}
 
 SCALING RULES:
 {instructions}
-- If the query involves comparison, ranking, or "highest/lowest" values: DO NOT use LIMIT and DO NOT use ORDER BY. Return all relevant rows without sorting bias for analysis.
-- DO NOT compute final metrics (like adjusted values or rankings) in SQL. Return the raw component fields (e.g., expected_yield, total_sales, priority) so the agent can perform the calculation via tools.
 
-3. CASE HANDLING:
+RETRIEVAL BOUNDARY (MUST FOLLOW):
+- NEVER attempt to determine "best", "top", "winner", or rankings in SQL. The downstream agent has Python tools that use formulas NOT available to SQL.
+- NEVER use subqueries with MAX(), MIN(), RANK(), or ROW_NUMBER() to filter by business metrics like expected_yield, demand, or strategic value.
+- NEVER use WHERE clauses that pre-solve the user's question (e.g., WHERE yield = (SELECT MAX(yield)...)). 
+- Instead, fetch ALL relevant rows with their raw component fields (expected_yield, demand, priority) so the agent can compute rankings.
+- If the user asks about a specific entity (e.g., "where does Zara rank highest?"), fetch ALL proposals involving that entity across all relevant malls. Do NOT pre-filter by ranking logic.
+
+CASE HANDLING:
 - Mall and Tenant names are in Proper Case (e.g., 'Mall of Istanbul', 'Zara').
 
-4. OUTPUT:
+OUTPUT:
 - Return ONLY SQL.
 
 GOOD EXAMPLES:
 {example_str}
-"""}
-    ]
+"""
+    messages.append({"role": "user", "content": prompt})
     
     response_text = call_llm(messages, model=model)
     return parse_sql(response_text)
@@ -136,10 +143,10 @@ def parse_sql(sql_query):
     else:
         sql = sql_query
         
-    # Remove common LLM labels if they leaked into the output
+    # Remove common LLM labels
     sql = re.sub(r'^(Mode|User Question|SQL):.*?\n', '', sql, flags=re.MULTILINE | re.IGNORECASE)
     
-    # Find the first SELECT statement and use that as the starting point
+    # Find the first SELECT statement
     select_match = re.search(r'SELECT\s+', sql, re.IGNORECASE)
     if select_match:
         sql = sql[select_match.start():]

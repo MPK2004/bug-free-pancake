@@ -14,6 +14,7 @@ def analyze(context: dict):
     query = context.get('query')
     request_id = context.get('request_id') or str(uuid.uuid4())
     model = context.get('model')
+    history = context.get('history', [])
 
     system_prompt = """
 You are a helpful assistant for the Mall Leasing AI system. 
@@ -21,13 +22,13 @@ You provide direct, concise answers to general questions that do not require dat
 If the user asks something that seems like it might need data, but you were routed here, answer as best as you can without hallucinating specific database values.
 """
 
-    messages = context.get('history', [])
-    if not messages:
-        messages = [{"role": "system", "content": system_prompt}]
-    
-    messages.append({"role": "user", "content": query})
-
     try:
+        # Always start with system prompt, then add history
+        messages = [{"role": "system", "content": system_prompt}]
+        if history:
+            messages.extend([dict(m) for m in history])
+        messages.append({"role": "user", "content": query})
+
         response = call_llm(messages, model=model)
         
         insights = [line.strip() for line in response.split('\n') if line.strip()]

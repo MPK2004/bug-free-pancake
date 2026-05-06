@@ -32,6 +32,7 @@ def analyze(context: dict):
     raw_data = context.get('data', [])
     request_id = context.get('request_id') or str(uuid.uuid4())
     model = context.get('model')
+    history = context.get('history', [])
     
     # Early exit if no data is found to prevent LLM hallucination in tool-calling loop
     if not raw_data:
@@ -70,17 +71,19 @@ STRICT RULES:
 DATASET:
 {data_summary}
 """
-
-    messages = context.get('history', [])
-    if not messages:
-        messages = [{"role": "system", "content": system_prompt}]
     
+    # Always start with system prompt, then add history
+    messages = [{"role": "system", "content": system_prompt}]
+    if history:
+        messages.extend([dict(m) for m in history])
+        
     messages.append({"role": "user", "content": f"User Query: {query}"})
 
     MAX_STEPS = 3
     rows_count = len(raw_data)
     
     try:
+        step = 0
         for step in range(MAX_STEPS):
             if DEBUG:
                 print(f"--- Financial Analyst Loop Step {step+1} ---", file=sys.stderr)
@@ -162,6 +165,10 @@ DATASET:
         
         # Final response is the last content from the LLM
         final_content = messages[-1].get("content", "")
+        if not final_content and messages[-1].get("tool_calls"):
+            # This shouldn't happen after the loop breaks, but defensively:
+            final_content = "Analysis completed via tools."
+
         insights = [line.strip() for line in final_content.split('\n') if line.strip()]
         
         meta = {
@@ -175,6 +182,8 @@ DATASET:
         return {'status': 'success', 'insights': insights, 'meta': meta}
 
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         print(f"Financial Analyst Error: {e}", file=sys.stderr)
         return {
             'status': 'error', 

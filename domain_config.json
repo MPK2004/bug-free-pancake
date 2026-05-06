@@ -21,7 +21,7 @@
       }
     },
     "rental_agreements": {
-      "description": "Table tracking active lease agreements between tenants and malls.",
+      "description": "Table tracking ACTIVE lease agreements between tenants and malls. Use this for questions about current occupancy or existing tenants.",
       "relationships": "Links to 'tenants' (tenant_id) and 'malls' (mall_id).",
       "columns": {
         "id": "Unique identifier for the agreement.",
@@ -35,7 +35,7 @@
       }
     },
     "proposals": {
-      "description": "Table containing new business proposals mapping tenants to malls.",
+      "description": "Table containing NEW business proposals for PLANNED leases. Use this for questions about potential tenants, upcoming deals, or where a brand is 'proposed'.",
       "relationships": "Links to 'tenants' (tenant_id) and 'malls' (mall_id).",
       "columns": {
         "id": "Unique identifier for the proposal.",
@@ -75,22 +75,27 @@
   },
   "sql_generation": {
     "strategic": {
-      "instructions": "1. STRATEGIC MODE:\n    - DO NOT use LIMIT 1.\n    - MANDATORY: Include `expected_yield`, `demand`, and `priority`.\n    - Aliases: `t` for tenants, `p` for proposals, `m` for malls, `tr_agg` for aggregated transactions, `ci` for category_insights.\n    - JOIN proposals (p) -> tenants (t) -> malls (m).\n    - SQL STRUCTURE: Aggregate transactions in a LEFT JOINed SUBQUERY (exactly like the examples). Do NOT use CTEs (WITH clause). Format: `SELECT ... FROM proposals p JOIN ... LEFT JOIN (SELECT category, shopping_mall, SUM(total_sales) AS demand FROM transactions GROUP BY category, shopping_mall) tr_agg ON ...`.\n    - NULL HANDLING: Use COALESCE(tr_agg.demand, 0) and COALESCE(ci.priority, 'LOW') to ensure valid numerical data for calculations.",
+      "instructions": "1. STRATEGIC MODE:\n    - DO NOT use LIMIT 1.\n    - MANDATORY: Include `expected_yield`, `demand`, and `priority`.\n    - CONTEXT RULE: Always include `t.name AS tenant`, `m.name AS mall`, and `t.category` in the SELECT clause to preserve conversational context.\n    - Aliases: `t` for tenants, `p` for proposals, `m` for malls, `tr_agg` for aggregated transactions, `ci` for category_insights.\n    - JOIN proposals (p) -> tenants (t) -> malls (m).\n    - SQL STRUCTURE: Aggregate transactions in a LEFT JOINed SUBQUERY (exactly like the examples). Do NOT use CTEs (WITH clause). Format: `SELECT ... FROM proposals p JOIN ... LEFT JOIN (SELECT category, shopping_mall, SUM(total_sales) AS demand FROM transactions GROUP BY category, shopping_mall) tr_agg ON ...`.\n    - NULL HANDLING: Use COALESCE(tr_agg.demand, 0) and COALESCE(ci.priority, 'LOW') to ensure valid numerical data for calculations.\n\n    RETRIEVAL BOUNDARY (CRITICAL):\n    - You are a DATA RETRIEVER, not a decision-maker. Your job is to fetch ALL raw data the downstream agent needs.\n    - NEVER use subqueries that filter by MAX(), MIN(), or RANK() on business metrics (expected_yield, demand, priority). These rankings are computed by Python tools AFTER the data is retrieved.\n    - NEVER use WHERE clauses that attempt to determine 'best', 'top', 'highest', or 'winner'. Instead, retrieve ALL candidates and let the agent decide.\n    - If the user asks about a specific tenant across multiple malls, fetch ALL proposals for that tenant (optionally filtered by tenant name), but do NOT pre-filter by ranking logic.\n    - If the user asks 'where is X the top proposal?', fetch ALL proposals for ALL relevant malls so the agent can run the ranking tool on each mall group.\n    - WRONG: WHERE p.expected_yield = (SELECT MAX(p2.expected_yield) ...)\n    - RIGHT: WHERE t.name = 'Zara' (simple entity filter, no ranking logic)",
       "examples": [
         {
           "mode": "STRATEGIC",
           "question": "Recommend a tenant for Kanyon mall",
-          "sql": "SELECT t.name AS tenant, p.expected_yield, COALESCE(tr_agg.demand, 0) AS demand, COALESCE(ci.priority, 'LOW') AS priority\nFROM proposals p\nJOIN tenants t ON p.tenant_id = t.id\nJOIN malls m ON p.mall_id = m.id\nLEFT JOIN (\n    SELECT category, shopping_mall, SUM(total_sales) AS demand\n    FROM transactions\n    GROUP BY category, shopping_mall\n) tr_agg ON tr_agg.category = t.category AND tr_agg.shopping_mall = m.name\nLEFT JOIN category_insights ci ON ci.category = t.category\nWHERE m.name = 'Kanyon';"
+          "sql": "SELECT t.name AS tenant, m.name AS mall, t.category, p.expected_yield, COALESCE(tr_agg.demand, 0) AS demand, COALESCE(ci.priority, 'LOW') AS priority\nFROM proposals p\nJOIN tenants t ON p.tenant_id = t.id\nJOIN malls m ON p.mall_id = m.id\nLEFT JOIN (\n    SELECT category, shopping_mall, SUM(total_sales) AS demand\n    FROM transactions\n    GROUP BY category, shopping_mall\n) tr_agg ON tr_agg.category = t.category AND tr_agg.shopping_mall = m.name\nLEFT JOIN category_insights ci ON ci.category = t.category\nWHERE m.name = 'Kanyon';"
+        },
+        {
+          "mode": "STRATEGIC",
+          "question": "Is there any other mall where Zara is the top proposal?",
+          "sql": "SELECT t.name AS tenant, m.name AS mall, t.category, p.expected_yield, COALESCE(tr_agg.demand, 0) AS demand, COALESCE(ci.priority, 'LOW') AS priority\nFROM proposals p\nJOIN tenants t ON p.tenant_id = t.id\nJOIN malls m ON p.mall_id = m.id\nLEFT JOIN (\n    SELECT category, shopping_mall, SUM(total_sales) AS demand\n    FROM transactions\n    GROUP BY category, shopping_mall\n) tr_agg ON tr_agg.category = t.category AND tr_agg.shopping_mall = m.name\nLEFT JOIN category_insights ci ON ci.category = t.category;"
         }
       ]
     },
     "analytical": {
-      "instructions": "1. ANALYTICAL MODE:\n    - Primary table: `transactions` (alias `tr`).\n    - Use `tr.category` and `tr.shopping_mall` for filtering/grouping.\n    - Join `category_insights` (ci) ONLY if priority is needed.\n    - SQL Rule: COALESCE(MAX(ci.priority), 'UNKNOWN') AS priority.\n    - NEVER use alias `t` (tenants) unless explicitly asked for tenant-specific details.\n    - Dominance = highest SUM(tr.total_sales) only.",
+      "instructions": "1. ANALYTICAL MODE:\n    - Primary table: `transactions` (alias `tr`) for sales analysis.\n    - For tenant lookups: Use `rental_agreements` for active tenants or `proposals` for planned tenants. Join `tenants` (t) and `malls` (m) as needed.\n    - CONTEXT RULE: Always include `tr.category` and `tr.shopping_mall` in the SELECT clause IF querying transactions.\n    - Use `tr.category` and `tr.shopping_mall` for filtering/grouping.\n    - Join `category_insights` (ci) ONLY if priority is needed.\n    - SQL Rule: COALESCE(MAX(ci.priority), 'UNKNOWN') AS priority.\n    - Dominance = highest SUM(tr.total_sales) only.",
       "examples": [
         {
           "mode": "ANALYTICAL",
           "question": "Which category dominates Kanyon?",
-          "sql": "SELECT tr.category AS dominant_category, SUM(tr.total_sales) AS demand, COALESCE(MAX(ci.priority), 'UNKNOWN') AS priority\nFROM transactions tr\nLEFT JOIN category_insights ci ON tr.category = ci.category\nWHERE tr.shopping_mall = 'Kanyon'\nGROUP BY tr.category\nORDER BY demand DESC;"
+          "sql": "SELECT tr.category AS dominant_category, tr.shopping_mall, SUM(tr.total_sales) AS demand, COALESCE(MAX(ci.priority), 'UNKNOWN') AS priority\nFROM transactions tr\nLEFT JOIN category_insights ci ON tr.category = ci.category\nWHERE tr.shopping_mall = 'Kanyon'\nGROUP BY tr.category, tr.shopping_mall\nORDER BY demand DESC;"
         }
       ]
     }

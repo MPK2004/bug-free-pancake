@@ -9,6 +9,22 @@ from llm.sql_generator import generate_sql
 from orchestrator import router
 from orchestrator.memory import ConversationHistory
 
+def extract_entities(rows):
+    """
+    Extracts key identifiers (mall names, brand names) from database rows
+    to anchor the data context for future turns.
+    """
+    if not rows:
+        return []
+    
+    identity_keys = {"tenant", "shopping_mall", "category", "brand", "entity_identifier", "dominant_category"}
+    entities = set()
+    for row in rows[:10]: # Check top results for context
+        for k, v in row.items():
+            if k.lower() in identity_keys and v:
+                entities.add(str(v))
+    return list(entities)
+
 def get_analysis_mode(intent):
     """
     Maps classified intent to SQL generation mode.
@@ -17,39 +33,16 @@ def get_analysis_mode(intent):
         return "strategic"
     return "analytical"
 
-def run_pipeline(user_query, history=None, request_id=None):
+def execute_step(task, history, active_model, FAST_MODEL, request_id=None):
     """
-    Orchestrates the NL-to-SQL-to-Analysis pipeline with a Multi-Model Cascade.
+    Executes a single atomic task (one step in the execution graph).
+    Returns (result_string, rows_list).
     """
-    pipeline_start = time.monotonic()
-    
-    # Load model configuration
-    FAST_MODEL = os.getenv("FAST_LLM_MODEL")
-    SMART_MODEL = os.getenv("SMART_LLM_MODEL")
-    
-    # 1. Intent Classification (The "Routing Brain")
-    # Uses truncated history for context-aware routing (pronoun resolution).
-    try:
-        clean_history = history.get_clean_history() if history else []
-        intent = router.classify_intent(user_query, history=clean_history)
-    except Exception as e:
-        print(f"[pipeline.error] Router failed: {e}. Falling back to GENERAL.")
-        intent = "GENERAL"
-    
-    print(f"Detected intent: {intent}")
-
-    # 2. Multi-Model Cascade Decision
-    # Cognitive Alignment: The model for SQL and Analysis mirrors the task complexity.
-    if intent == "FINANCIAL_ANALYSIS":
-        active_model = SMART_MODEL
-    else:
-        active_model = FAST_MODEL
-        
-    print(f"Active model for cascade: {active_model}")
-
+    intent = task['intent']
+    sub_query = task['sub_query']
     rows_list = []
     
-    # 3. Data Acquisition (Skip if GENERAL)
+    # 1. Data Acquisition (Skip if GENERAL)
     if intent != "GENERAL":
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -57,9 +50,10 @@ def run_pipeline(user_query, history=None, request_id=None):
             schema_dict = get_schema(cursor)
             analysis_mode = get_analysis_mode(intent)
             
-            # Pass history for pronoun resolution in SQL generation
-            truncated_history = history.get_truncated() if history else []
-            sql_query = generate_sql(user_query, schema_dict, history=truncated_history, mode=analysis_mode, model=active_model)
+            # Use Clean History (Synthetic Data Context) for SQL generation to avoid noise
+            truncated_history = history.get_clean_history()
+            
+            sql_query = generate_sql(sub_query, schema_dict, history=truncated_history, mode=analysis_mode, model=active_model)
             
             MAX_SQL_ATTEMPTS = 2
             results = None
@@ -74,7 +68,7 @@ def run_pipeline(user_query, history=None, request_id=None):
                     if not is_safe_sql(final_sql):
                         raise Exception("Insecure SQL generated.")
 
-                    print(f"Executing SQL (Attempt {sql_attempt + 1}): {final_sql}")
+                    print(f"[{intent}] Executing SQL (Attempt {sql_attempt + 1}): {final_sql}")
                     results = execute_query(cursor, final_sql)
                     break # Success!
                 except Exception as e:
@@ -88,7 +82,7 @@ def run_pipeline(user_query, history=None, request_id=None):
                             "previous_sql": sql_to_execute
                         }
                         sql_to_execute = generate_sql(
-                            user_query, 
+                            sub_query, 
                             schema_dict, 
                             history=truncated_history, 
                             mode=analysis_mode, 
@@ -99,139 +93,103 @@ def run_pipeline(user_query, history=None, request_id=None):
                         raise e # Out of attempts
 
             if results is None:
-                raise Exception("SQL Acquisition failed after multiple attempts.")
+                raise Exception("SQL Acquisition failed.")
             
             columns = [desc[0] for desc in cursor.description]
             rows_list = [dict(zip(columns, row)) for row in results]
         finally:
             conn.close()
-    else:
-        print("Skipping SQL generation for GENERAL intent.")
 
-    # 4. Agent Selection & Analysis Loop
-    agent = router.route(user_query, rows_list, intent=intent)
-    print(f"Selected agent: {agent.NAME}")
-
+    # 2. Agent Selection & Analysis Loop
+    agent = router.route(sub_query, rows_list, intent=intent)
+    
     MAX_RETRIES = 3
-    MAX_BACKOFF_SECONDS = 10
-    DEADLINE_SECONDS = float(os.getenv("LLM_DEADLINE", "20"))
+    DEADLINE_SECONDS = float(os.getenv("LLM_DEADLINE", "30"))
     SAFETY_MARGIN = 0.2
     
-    if not hasattr(run_pipeline, "_circuit_states"):
-        run_pipeline._circuit_states = {}
-    
-    CIRCUIT_THRESHOLD = 5
-    CIRCUIT_RESET_WINDOW = 60
-    
-    # Circuit breaker key now includes the specific model in the cascade
-    provider = "openrouter"
-    cb_key = f"{provider}:{active_model}"
-    
-    if cb_key not in run_pipeline._circuit_states:
-        run_pipeline._circuit_states[cb_key] = {"failures": 0, "last_failure": 0, "state": "CLOSED"}
-    
-    result = None
-    attempt_summary = []
+    step_start = time.monotonic()
     
     for attempt in range(1, MAX_RETRIES + 1):
-        now = time.monotonic()
-        cb = run_pipeline._circuit_states[cb_key]
-        
-        if cb["state"] == "OPEN" and (now - cb["last_failure"] > CIRCUIT_RESET_WINDOW):
-            cb["state"] = "HALF_OPEN"
-            print(f"[RECOVER] [{request_id}] Circuit {cb_key} transitioned to HALF_OPEN. Probing...")
-
-        if cb["state"] == "OPEN":
-            result = {
-                "status": "error", "type": "internal_transient", "code": "CIRCUIT_OPEN", 
-                "message": f"Circuit {cb_key} is OPEN. Upstream unstable.", 
-                "meta": {"attempts": attempt-1, "total_duration_ms": int((now - pipeline_start) * 1000)}
-            }
-            break
-        
-        remaining_s = DEADLINE_SECONDS - (now - pipeline_start)
+        remaining_s = DEADLINE_SECONDS - (time.monotonic() - step_start)
         if remaining_s <= SAFETY_MARGIN:
-            result = {
-                "status": "error", "type": "timeout", "code": "DEADLINE_EXCEEDED",
-                "message": f"Exceeded overall deadline ({DEADLINE_SECONDS}s).",
-                "meta": {"request_id": request_id, "attempts": attempt - 1, "total_duration_ms": int((now - pipeline_start) * 1000)}
-            }
-            break
+            return "Analysis timed out.", rows_list
 
-        # Inject context and history for the agent
         analysis_context = {
-            "query": user_query, 
+            "query": sub_query, 
             "data": rows_list, 
-            "history": history.get_full() if history else [],
+            "history": history.get_full(), # Analyst gets the rich history (snapshot + messages)
             "request_id": request_id,
             "attempt": attempt, 
             "deadline_s": DEADLINE_SECONDS, 
             "remaining_s": remaining_s,
-            "model": active_model, 
-            "region": os.getenv("LLM_REGION", "auto")
+            "model": active_model
         }
         
-        attempt_start = time.monotonic()
         result = agent.analyze(analysis_context)
         
-        if result is None:
-            print(f"[pipeline.error] Agent {agent.NAME} returned None result.", file=sys.stderr)
-            result = {"status": "error", "message": "Agent returned null result.", "code": "AGENT_NULL"}
-            
-        attempt_duration = int((time.monotonic() - attempt_start) * 1000)
-        
-        err_code = result.get("code", "UNKNOWN")
-        attempt_summary.append({
-            "attempt": attempt, 
-            "code": err_code if result["status"] == "error" else "SUCCESS",
-            "status_code": result.get("status_code", 200),
-            "duration_ms": attempt_duration
-        })
-        
         if result["status"] == "success":
-            if cb["state"] == "HALF_OPEN":
-                cb["state"] = "CLOSED"
-                cb["failures"] = 0
-            cb["failures"] = 0 
-            break
+            return "\n".join(result["insights"]), rows_list
         
-        if result.get("type") in ["timeout", "internal_transient"]:
-             cb["failures"] += 1
-             cb["last_failure"] = time.monotonic()
-             if cb["state"] == "HALF_OPEN" or cb["failures"] >= CIRCUIT_THRESHOLD:
-                 cb["state"] = "OPEN"
-
+        # Exponential backoff on transient errors
         if result.get("type") in ["timeout", "internal_transient"] and attempt < MAX_RETRIES:
-            base = 3 if err_code == "RATE_LIMITED_429" else 2
-            raw_delay = (base ** (attempt - 1)) + random.uniform(0, 1)
-            delay = min(raw_delay, MAX_BACKOFF_SECONDS)
-            remaining_after_call = DEADLINE_SECONDS - (time.monotonic() - pipeline_start)
-            sleep_for = min(delay, max(0, remaining_after_call - SAFETY_MARGIN))
-            if sleep_for <= 0: break
-            time.sleep(sleep_for)
+            time.sleep(min(2 ** attempt, 5))
         else:
             break
-    
-    if result and "meta" in result:
-        result["meta"]["attempt_summary"] = attempt_summary
-        result["meta"]["total_duration_ms"] = int((time.monotonic() - pipeline_start) * 1000)
-
-    print("\nANALYSIS:")
-    final_output = ""
-    if result["status"] == "success":
-        final_output = "\n".join(result["insights"])
-        print(final_output)
-        
-        # 5. Persist to History & Compact
-        if history:
-            # We append the final response to the history
-            history.append("assistant", final_output)
-            # Check for compaction
-            history.compact(model=FAST_MODEL)
             
-        return result["insights"]
-    else:
-        final_output = result.get("message", "Analysis failed.")
-        if history:
-            history.append("assistant", f"ERROR: {final_output}")
-        return final_output
+    return result.get("message", "Analysis failed."), rows_list
+
+def run_pipeline(user_query, request_id=None, history=None):
+    """
+    Generator that orchestrates the execution graph and yields status events.
+    """
+    if history is None:
+        history = ConversationHistory()
+        
+    FAST_MODEL = os.getenv("FAST_LLM_MODEL")
+    SMART_MODEL = os.getenv("SMART_LLM_MODEL")
+
+    # 1. Planning Step
+    yield {"event": "planning", "status": "Decomposing query into tasks..."}
+    try:
+        # Use Hybrid Context (Entities + Conclusion) for routing
+        router_history = history.get_router_history(limit=3)
+        tasks = router.plan_tasks(user_query, history=router_history)
+    except Exception as e:
+        print(f"[pipeline] Planning error: {e}")
+        tasks = [{"intent": "GENERAL", "sub_query": user_query}]
+    
+    yield {"event": "plan_ready", "tasks": tasks}
+
+    # Pre-append user query to anchor context for all steps
+    history.append("user", user_query)
+
+    full_results = []
+    
+    for i, task in enumerate(tasks):
+        intent = task['intent']
+        
+        yield {"event": "step_start", "index": i + 1, "task": task}
+
+        # Select model based on intent complexity
+        active_model = SMART_MODEL if intent == "FINANCIAL_ANALYSIS" else FAST_MODEL
+        
+        try:
+            step_insights, rows_list = execute_step(task, history, active_model, FAST_MODEL, request_id=request_id)
+            
+            # Anchor entities and intent to history for next turn/step resolution
+            entities = extract_entities(rows_list)
+            history.append("assistant", step_insights, entities=entities, intent=intent)
+            
+            full_results.append(step_insights)
+            yield {"event": "step_complete", "index": i + 1, "insights": step_insights}
+        except Exception as e:
+            error_msg = f"Step {i+1} failed: {e}"
+            print(f"[pipeline] {error_msg}")
+            history.append("assistant", f"ERROR: {error_msg}")
+            full_results.append(error_msg)
+            yield {"event": "step_complete", "index": i + 1, "insights": error_msg}
+
+    # Final maintenance (Compaction)
+    history.compact(model=FAST_MODEL)
+    
+    yield {"event": "pipeline_complete", "results": full_results}

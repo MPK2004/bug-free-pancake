@@ -1,39 +1,47 @@
 import os
 import json
+import re
 from llm.client import call_llm
 
-SUMMARIZER_PROMPT = """
-You are a memory compaction engine for an AI agent. Your goal is to compress a conversation history while maintaining zero-loss for critical data.
+def summarize_history(messages, current_snapshot=None, model=None):
+    """
+    Recursive Hybrid Summarization: Compresses conversation into Narrative + Data Ledger.
+    Maintains zero-loss for critical metrics and IDs.
+    """
+    if not messages:
+        return current_snapshot
 
-### COMPACTION RULES:
-1.  **SESSION_NARRATIVE**: A concise, 2-3 paragraph summary of the conversation's progress, user intent, and key discoveries.
-2.  **DATA_LEDGER**: A structured list of every exact entity (Malls, Brands, KPIs, Dates, IDs) mentioned. If a specific dollar amount or metric was calculated, it MUST be preserved exactly.
+    # Use FAST_MODEL for summarization
+    model = model or os.getenv('FAST_LLM_MODEL', "openai/gpt-3.5-turbo")
+    
+    previous_snapshot_str = json.dumps(current_snapshot, indent=2) if current_snapshot else "None"
 
-### CURRENT STATE:
-Previous Snapshot: {previous_snapshot}
+    prompt = f"""
+You are the Memory Compaction Engine for a Mall Leasing AI. 
+Your goal is to compress the provided conversation history into a hybrid "Session Snapshot" while maintaining zero-loss for critical data.
+
+STRICT RULES:
+1.  **SESSION_NARRATIVE**: A concise, 1-2 paragraph prose summary of the conversation's progress, user intent, and key reasoning.
+2.  **DATA_LEDGER**: A lossless, structured dictionary of EVERY exact entity (Malls, Brands, KPIs, Dates, IDs) mentioned. 
+3.  **LOSSLESSNESS IS NON-NEGOTIABLE**:
+    - You MUST NOT round, omit, abbreviate, or approximate ANY numerical value.
+    - If the original value is 22947417.68, write 22947417.68.
+    - If a proposal ID is P-9921, it must remain exactly as-is.
+4.  **UPSERT LOGIC**: If a metric for a specific ID exists in the previous snapshot and the new messages, keep the most recent one.
+
+### PREVIOUS SNAPSHOT:
+{previous_snapshot_str}
 
 ### NEW MESSAGES TO COMPACT:
-{new_messages}
+{json.dumps(messages, indent=2)}
 
 ### OUTPUT FORMAT:
 You MUST respond in raw JSON format with two keys:
 {{
   "narrative": "...",
-  "data_ledger": {{ ... }}
+  "data_ledger": {{ "EntityName": {{ "id": "...", "metric": "...", "value": ... }}, ... }}
 }}
 """
-
-def summarize_history(messages, current_snapshot=None, model=None):
-    """
-    Recursive Hybrid Summarization: Compresses conversation into Narrative + Data Ledger.
-    """
-    if not model:
-        model = os.getenv('FAST_LLM_MODEL', "openai/gpt-3.5-turbo") # Default fast model
-
-    prompt = SUMMARIZER_PROMPT.format(
-        previous_snapshot=json.dumps(current_snapshot) if current_snapshot else "None",
-        new_messages=json.dumps(messages, indent=2)
-    )
 
     system_msg = {"role": "system", "content": "You are a precise data summarizer. Output ONLY raw JSON."}
     user_msg = {"role": "user", "content": prompt}
@@ -49,8 +57,8 @@ def summarize_history(messages, current_snapshot=None, model=None):
         
         return json.loads(response_text)
     except Exception as e:
-        print(f"[ERROR] Failed to parse summarizer response: {e}")
-        # Fallback: return a basic narrative if JSON fails
+        print(f"[summarizer] Failed to parse JSON: {e}")
+        # Fallback
         return {
             "narrative": response_text[:500],
             "data_ledger": current_snapshot.get("data_ledger", {}) if current_snapshot else {}

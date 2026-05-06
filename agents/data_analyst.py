@@ -28,6 +28,7 @@ def analyze(context: dict):
     raw_data = context.get('data', [])
     request_id = context.get('request_id') or str(uuid.uuid4())
     model = context.get('model')
+    history = context.get('history', [])
 
     if not raw_data:
         return {'status': 'success', 'insights': ['No data found to aggregate.'], 'meta': {'rows_used': 0}}
@@ -76,16 +77,19 @@ INSIGHT:
 CONCLUSION:
 (Direct answer to the user's query)
 """
-    messages = context.get('history', [])
-    messages.append({"role": "user", "content": analysis_prompt})
-    
-    return _execute_llm_analysis(messages, start_time, request_id, len(raw_data), model=model)
+    return _execute_llm_analysis(analysis_prompt, start_time, request_id, len(raw_data), model=model, history=history)
 
-def _execute_llm_analysis(messages, start_time, request_id, rows_count, model=None):
+def _execute_llm_analysis(prompt, start_time, request_id, rows_count, model=None, history=None):
     if DEBUG:
         print(f'--- Executing Data Analyst (Analytical Mode) ---', file=sys.stderr)
 
     try:
+        messages = []
+        if history:
+            # Important: Create a copy of the history to avoid modifying it in-place
+            messages.extend([dict(m) for m in history])
+        messages.append({'role': 'user', 'content': prompt})
+
         response = call_llm(messages, timeout=20, model=model)
         insights = [line.strip() for line in response.split('\n') if line.strip()]
         

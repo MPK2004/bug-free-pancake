@@ -28,14 +28,14 @@ def main():
     db_manager.create_thread(thread_id, user_id, title="New Chat")
     history = ConversationHistory(thread_id=thread_id, db_manager=db_manager)
     
-    print(f"System initialized for domain: {DOMAIN_CONFIG.get('domain_name', 'Unknown')}")
+    print(f"\n=== {DOMAIN_CONFIG.get('domain_name', 'System')} AI Agent (Interactive Mode) ===")
     print(f"Active Thread: {thread_id}")
     print_help()
 
     while True:
         try:
-            user_query = input('\n> ')
-            if not user_query.strip():
+            user_query = input('\nQuestion > ').strip()
+            if not user_query:
                 continue
             
             # Handle Commands
@@ -80,12 +80,35 @@ def main():
                     print("Unknown command. Type /help for assistance.")
                     continue
 
-            # Append user query to history
-            history.append("user", user_query)
-            
-            # Run Pipeline
             request_id = str(uuid.uuid4())
-            run_pipeline(user_query, history=history, request_id=request_id)
+            
+            # Run Pipeline using the generator for real-time feedback
+            for event in run_pipeline(user_query, request_id=request_id, history=history):
+                etype = event.get("event")
+                
+                if etype == "planning":
+                    print(f"[*] {event['status']}")
+                
+                elif etype == "plan_ready":
+                    tasks = event['tasks']
+                    print(f"[PLAN] Identified {len(tasks)} tasks:")
+                    for i, t in enumerate(tasks):
+                        print(f"  {i+1}. [{t['intent']}] {t['sub_query']}")
+                
+                elif etype == "step_start":
+                    idx = event['index']
+                    task = event['task']
+                    print(f"\n[RUNNING] Step {idx}: {task['sub_query']}...")
+                
+                elif etype == "step_complete":
+                    print(f"[DONE] Step {event['index']} complete.")
+                
+                elif etype == "pipeline_complete":
+                    print("\n" + "="*20 + " FINAL ANALYSIS " + "="*20)
+                    for result in event['results']:
+                        print(result)
+            
+            print("-" * 50)
             
         except (KeyboardInterrupt, EOFError):
             print('\nExiting...')
@@ -94,7 +117,6 @@ def main():
             import traceback
             traceback.print_exc()
             print(f'An error occurred: {e}')
-            # Don't exit, just continue the loop
             continue
 
 if __name__ == '__main__':
