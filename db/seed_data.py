@@ -84,6 +84,25 @@ def seed():
         for prop in proposals:
             cur.execute("INSERT INTO proposals (tenant_id, mall_id, proposed_rent, expected_sales) VALUES (%s, %s, %s, %s);", prop)
 
+        # 5. Seed Rental Agreements (Active Tenants)
+        agreements = [
+            (1, 1, 120000, 2.5, '2023-01-01', '2025-01-01', 'Active'), # Zara at Mall of Istanbul
+            (2, 2, 90000, 3.0, '2023-05-01', '2026-05-01', 'Active'),  # H&M at Kanyon
+            (3, 3, 70000, 2.0, '2023-02-01', '2025-02-01', 'Active'),  # Nike at Metrocity
+            (4, 4, 65000, 2.0, '2023-03-01', '2025-03-01', 'Active'),  # Adidas at Metropol AVM
+            (5, 5, 110000, 1.5, '2023-04-01', '2026-04-01', 'Active'), # Samsung at Istinye Park
+            (6, 6, 180000, 1.0, '2023-06-01', '2027-06-01', 'Active'), # Apple at Zorlu Center
+            (7, 7, 45000, 5.0, '2023-01-15', '2024-01-15', 'Active'),  # KFC at Cevahir AVM
+            (8, 8, 40000, 6.0, '2023-02-15', '2024-02-15', 'Active'),  # Starbucks at Viaport Outlet
+            (9, 9, 55000, 4.0, '2023-03-15', '2025-03-15', 'Active'),  # Sephora at Emaar Square Mall
+            (10, 10, 30000, 0.0, '2023-04-15', '2025-04-15', 'Active') # Toyzz Shop at Forum Istanbul
+        ]
+        for agg in agreements:
+            cur.execute("""
+                INSERT INTO rental_agreements (tenant_id, mall_id, base_rent, revenue_share_percentage, start_date, end_date, status)
+                VALUES (%s, %s, %s, %s, %s, %s, %s);
+            """, agg)
+
         conn.commit()
         print("Database seeded successfully!")
 

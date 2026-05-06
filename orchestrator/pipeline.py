@@ -40,7 +40,6 @@ def execute_step(task, history, active_model, FAST_MODEL, request_id=None):
     """
     intent = task['intent']
     sub_query = task['sub_query']
-    
     rows_list = []
     
     # 1. Data Acquisition (Skip if GENERAL)
@@ -51,17 +50,51 @@ def execute_step(task, history, active_model, FAST_MODEL, request_id=None):
             schema_dict = get_schema(cursor)
             analysis_mode = get_analysis_mode(intent)
             
-            # Pass sub_query for precise SQL generation
-            sql_query = generate_sql(sub_query, schema_dict, mode=analysis_mode, model=active_model, history=history.get_clean_history())
-            print(f"\n[{intent}] Generated SQL: {sql_query}")
+            # Use Clean History (Synthetic Data Context) for SQL generation to avoid noise
+            truncated_history = history.get_clean_history()
+            
+            sql_query = generate_sql(sub_query, schema_dict, history=truncated_history, mode=analysis_mode, model=active_model)
+            
+            MAX_SQL_ATTEMPTS = 2
+            results = None
+            sql_to_execute = sql_query
 
-            sql_query = fix_case(sql_query)
-            final_sql = enforce_limit(sql_query)
+            for sql_attempt in range(MAX_SQL_ATTEMPTS):
+                try:
+                    # Clean and Enforce
+                    final_sql = fix_case(sql_to_execute)
+                    final_sql = enforce_limit(final_sql)
 
-            if not is_safe_sql(final_sql):
-                return "Error: Insecure query generated.", []
+                    if not is_safe_sql(final_sql):
+                        raise Exception("Insecure SQL generated.")
 
-            results = execute_query(cursor, final_sql)
+                    print(f"[{intent}] Executing SQL (Attempt {sql_attempt + 1}): {final_sql}")
+                    results = execute_query(cursor, final_sql)
+                    break # Success!
+                except Exception as e:
+                    last_error = str(e)
+                    print(f"SQL Execution Failed: {last_error}")
+                    
+                    if sql_attempt < MAX_SQL_ATTEMPTS - 1:
+                        print("Attempting agentic self-correction...")
+                        feedback = {
+                            "error": last_error,
+                            "previous_sql": sql_to_execute
+                        }
+                        sql_to_execute = generate_sql(
+                            sub_query, 
+                            schema_dict, 
+                            history=truncated_history, 
+                            mode=analysis_mode, 
+                            model=active_model,
+                            feedback=feedback
+                        )
+                    else:
+                        raise e # Out of attempts
+
+            if results is None:
+                raise Exception("SQL Acquisition failed.")
+            
             columns = [desc[0] for desc in cursor.description]
             rows_list = [dict(zip(columns, row)) for row in results]
         finally:
@@ -74,16 +107,7 @@ def execute_step(task, history, active_model, FAST_MODEL, request_id=None):
     DEADLINE_SECONDS = float(os.getenv("LLM_DEADLINE", "30"))
     SAFETY_MARGIN = 0.2
     
-    # Simple Circuit Breaker logic (stateless for the step, persistent for the process)
-    if not hasattr(execute_step, "_circuit_states"):
-        execute_step._circuit_states = {}
-    
-    cb_key = f"openrouter:{active_model}"
-    if cb_key not in execute_step._circuit_states:
-        execute_step._circuit_states[cb_key] = {"failures": 0, "last_failure": 0, "state": "CLOSED"}
-
     step_start = time.monotonic()
-    result = None
     
     for attempt in range(1, MAX_RETRIES + 1):
         remaining_s = DEADLINE_SECONDS - (time.monotonic() - step_start)
@@ -93,13 +117,12 @@ def execute_step(task, history, active_model, FAST_MODEL, request_id=None):
         analysis_context = {
             "query": sub_query, 
             "data": rows_list, 
-            "history": history.get_full(),
+            "history": history.get_full(), # Analyst gets the rich history (snapshot + messages)
             "request_id": request_id,
             "attempt": attempt, 
             "deadline_s": DEADLINE_SECONDS, 
             "remaining_s": remaining_s,
-            "model": active_model, 
-            "region": os.getenv("LLM_REGION", "auto")
+            "model": active_model
         }
         
         result = agent.analyze(analysis_context)
@@ -122,15 +145,17 @@ def run_pipeline(user_query, request_id=None, history=None):
     if history is None:
         history = ConversationHistory()
         
-    pipeline_start = time.monotonic()
     FAST_MODEL = os.getenv("FAST_LLM_MODEL")
     SMART_MODEL = os.getenv("SMART_LLM_MODEL")
 
     # 1. Planning Step
     yield {"event": "planning", "status": "Decomposing query into tasks..."}
     try:
-        tasks = router.plan_tasks(user_query, history=history.get_truncated(3))
+        # Use Hybrid Context (Entities + Conclusion) for routing
+        router_history = history.get_router_history(limit=3)
+        tasks = router.plan_tasks(user_query, history=router_history)
     except Exception as e:
+        print(f"[pipeline] Planning error: {e}")
         tasks = [{"intent": "GENERAL", "sub_query": user_query}]
     
     yield {"event": "plan_ready", "tasks": tasks}
@@ -142,25 +167,29 @@ def run_pipeline(user_query, request_id=None, history=None):
     
     for i, task in enumerate(tasks):
         intent = task['intent']
-        sub_query = task['sub_query']
         
         yield {"event": "step_start", "index": i + 1, "task": task}
 
         # Select model based on intent complexity
         active_model = SMART_MODEL if intent == "FINANCIAL_ANALYSIS" else FAST_MODEL
         
-        step_insights, rows_list = execute_step(task, history, active_model, FAST_MODEL, request_id=request_id)
-        
-        # Anchor entities to history for next turn/step resolution
-        entities = extract_entities(rows_list)
-        history.append("assistant", step_insights, entities=entities)
-        
-        full_results.append(step_insights)
-        
-        yield {"event": "step_complete", "index": i + 1, "insights": step_insights}
+        try:
+            step_insights, rows_list = execute_step(task, history, active_model, FAST_MODEL, request_id=request_id)
+            
+            # Anchor entities and intent to history for next turn/step resolution
+            entities = extract_entities(rows_list)
+            history.append("assistant", step_insights, entities=entities, intent=intent)
+            
+            full_results.append(step_insights)
+            yield {"event": "step_complete", "index": i + 1, "insights": step_insights}
+        except Exception as e:
+            error_msg = f"Step {i+1} failed: {e}"
+            print(f"[pipeline] {error_msg}")
+            history.append("assistant", f"ERROR: {error_msg}")
+            full_results.append(error_msg)
+            yield {"event": "step_complete", "index": i + 1, "insights": error_msg}
 
-    # Final maintenance
+    # Final maintenance (Compaction)
     history.compact(model=FAST_MODEL)
     
     yield {"event": "pipeline_complete", "results": full_results}
-

@@ -12,12 +12,13 @@ def select_relevant_tables(user_query, mode="analytical", model=None, history=No
     summaries = get_table_summaries()
     summaries_str = json.dumps(summaries, indent=2)
     
-    config = DOMAIN_CONFIG.get("sql_generation", {}).get(mode, {})
+    config = (DOMAIN_CONFIG or {}).get("sql_generation", {}).get(mode, {})
     mode_instructions = config.get("instructions", "")
     
     messages = []
     if history:
-        messages.extend(history)
+        # Use a subset of history for table selection to avoid noise
+        messages.extend(history[-2:])
     
     prompt = f"""
 Given the following database tables and their relationships, identify the tables needed to answer the user's query.
@@ -50,16 +51,15 @@ Response format: ["table1", "table2"]
     except:
         return []
 
-def generate_sql(user_query, schema_data, mode="analytical", model=None, history=None):
+def generate_sql(user_query, schema_data, history=None, mode="analytical", model=None, feedback=None):
     """
     Constructs the prompt and calls the LLM to generate SQL.
-    If schema_data is a dict (raw schema), it performs dynamic pruning.
-    Now supports history for pronoun resolution.
+    Supports history for pronoun resolution and feedback for self-correction.
     """
     # Dynamic Schema Pruning
     selected_tables = None
     if isinstance(schema_data, dict):
-        # Only prune if there are many tables (e.g., > 4 for this small demo, or 10+ for real world)
+        # Prune if schema is large
         if len(schema_data) > 4:
             print(f"[sql_generator] Large schema detected ({len(schema_data)} tables). Pruning...")
             selected_tables = select_relevant_tables(user_query, mode=mode, model=model, history=history)
@@ -68,7 +68,8 @@ def generate_sql(user_query, schema_data, mode="analytical", model=None, history
         schema_str = format_schema(schema_data, selected_tables=selected_tables)
     else:
         schema_str = schema_data
-    config = DOMAIN_CONFIG.get("sql_generation", {}).get(mode, {})
+
+    config = (DOMAIN_CONFIG or {}).get("sql_generation", {}).get(mode, {})
     instructions = config.get("instructions", "No instructions provided for this mode.")
     examples = config.get("examples", [])
     
@@ -76,12 +77,25 @@ def generate_sql(user_query, schema_data, mode="analytical", model=None, history
     for ex in examples:
         example_str += f"\nMode: {ex.get('mode')}\nUser Question: \"{ex.get('question')}\"\nSQL:\n{ex.get('sql')}\n"
 
+    feedback_str = ""
+    if feedback:
+        feedback_str = f"""
+### PREVIOUS ATTEMPT FAILED ###
+The following SQL was generated but failed execution:
+{feedback.get('previous_sql', '')}
+
+ERROR COMPLAINT:
+{feedback.get('error', '')}
+
+FIX THE ERROR above and return the corrected SQL. Pay attention to scoping, table aliases, and column names.
+"""
+
     messages = []
     if history:
-        messages.extend(history)
+        messages.extend([dict(m) for m in history])
 
-    messages.append({
-        "role": "user", "content": f"""
+    prompt = f"""
+{feedback_str}
 Convert the following natural language query into a DATA RETRIEVAL SQL query. 
 
 CRITICAL: You are a DATA RETRIEVER, not a decision-maker. Your ONLY job is to fetch the raw data that a downstream Python agent will analyze using its own tools and formulas. 
@@ -98,7 +112,7 @@ SCALING RULES:
 {instructions}
 
 RETRIEVAL BOUNDARY (MUST FOLLOW):
-- NEVER attempt to determine "best", "top", "winner", or rankings in SQL. The downstream agent has Python tools (e.g., calculate_adjusted_value) that use formulas NOT available to SQL.
+- NEVER attempt to determine "best", "top", "winner", or rankings in SQL. The downstream agent has Python tools that use formulas NOT available to SQL.
 - NEVER use subqueries with MAX(), MIN(), RANK(), or ROW_NUMBER() to filter by business metrics like expected_yield, demand, or strategic value.
 - NEVER use WHERE clauses that pre-solve the user's question (e.g., WHERE yield = (SELECT MAX(yield)...)). 
 - Instead, fetch ALL relevant rows with their raw component fields (expected_yield, demand, priority) so the agent can compute rankings.
@@ -112,8 +126,8 @@ OUTPUT:
 
 GOOD EXAMPLES:
 {example_str}
-"""})
-
+"""
+    messages.append({"role": "user", "content": prompt})
     
     response_text = call_llm(messages, model=model)
     return parse_sql(response_text)
@@ -129,10 +143,10 @@ def parse_sql(sql_query):
     else:
         sql = sql_query
         
-    # Remove common LLM labels if they leaked into the output
+    # Remove common LLM labels
     sql = re.sub(r'^(Mode|User Question|SQL):.*?\n', '', sql, flags=re.MULTILINE | re.IGNORECASE)
     
-    # Find the first SELECT statement and use that as the starting point
+    # Find the first SELECT statement
     select_match = re.search(r'SELECT\s+', sql, re.IGNORECASE)
     if select_match:
         sql = sql[select_match.start():]

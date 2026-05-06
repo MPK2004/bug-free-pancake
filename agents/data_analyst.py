@@ -82,12 +82,12 @@ CONCLUSION:
 def _execute_llm_analysis(prompt, start_time, request_id, rows_count, model=None, history=None):
     if DEBUG:
         print(f'--- Executing Data Analyst (Analytical Mode) ---', file=sys.stderr)
-        print(redact(prompt), file=sys.stderr)
 
     try:
         messages = []
         if history:
-            messages.extend(history)
+            # Important: Create a copy of the history to avoid modifying it in-place
+            messages.extend([dict(m) for m in history])
         messages.append({'role': 'user', 'content': prompt})
 
         response = call_llm(messages, timeout=20, model=model)
