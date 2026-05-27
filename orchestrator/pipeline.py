@@ -42,8 +42,8 @@ def execute_step(task, history, active_model, FAST_MODEL, request_id=None):
     sub_query = task['sub_query']
     rows_list = []
     
-    # 1. Data Acquisition (Skip if GENERAL)
-    if intent != "GENERAL":
+    # 1. Data Acquisition (Skip if GENERAL, BUILD_ONTOLOGY, or RUN_PREDICTION)
+    if intent not in ["GENERAL", "BUILD_ONTOLOGY", "RUN_PREDICTION"]:
         conn = get_db_connection()
         cursor = conn.cursor()
         try:
@@ -128,6 +128,26 @@ def execute_step(task, history, active_model, FAST_MODEL, request_id=None):
         result = agent.analyze(analysis_context)
         
         if result["status"] == "success":
+            # Hybrid State Compaction: Merge any data ledger updates into memory snapshot
+            meta = result.get("meta", {})
+            if "data_ledger" in meta:
+                import json
+                if not history.snapshot:
+                    history.snapshot = {"narrative": "Simulation state compiled.", "data_ledger": {}}
+                if "data_ledger" not in history.snapshot:
+                    history.snapshot["data_ledger"] = {}
+                history.snapshot["data_ledger"].update(meta["data_ledger"])
+                
+                # Persist snapshot update in database
+                if history.thread_id and history.db_manager:
+                    history.db_manager.save_snapshot(
+                        history.thread_id,
+                        history.step_index,
+                        history.snapshot.get("narrative", ""),
+                        history.snapshot.get("data_ledger", {})
+                    )
+                print(f"[pipeline] COMPACTED ledger updated: {json.dumps(meta['data_ledger'])}")
+                
             return "\n".join(result["insights"]), rows_list
         
         # Exponential backoff on transient errors
@@ -171,7 +191,7 @@ def run_pipeline(user_query, request_id=None, history=None):
         yield {"event": "step_start", "index": i + 1, "task": task}
 
         # Select model based on intent complexity
-        active_model = SMART_MODEL if intent == "FINANCIAL_ANALYSIS" else FAST_MODEL
+        active_model = SMART_MODEL if intent in ["FINANCIAL_ANALYSIS", "BUILD_ONTOLOGY", "RUN_PREDICTION"] else FAST_MODEL
         
         try:
             step_insights, rows_list = execute_step(task, history, active_model, FAST_MODEL, request_id=request_id)

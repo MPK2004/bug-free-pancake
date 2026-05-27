@@ -3,11 +3,11 @@ import json
 import os
 from collections import Counter
 from threading import Lock
-from agents import data_analyst, financial_analyst, general_responder
+from agents import data_analyst, financial_analyst, general_responder, ontology_builder, prediction_simulator
 from llm.client import call_llm
 
 # Thread-safe Intent Distribution Tracking
-INTENT_COUNTS = Counter({"DATA_ANALYSIS": 0, "FINANCIAL_ANALYSIS": 0, "GENERAL": 0})
+INTENT_COUNTS = Counter({"DATA_ANALYSIS": 0, "FINANCIAL_ANALYSIS": 0, "GENERAL": 0, "BUILD_ONTOLOGY": 0, "RUN_PREDICTION": 0})
 LOCK = Lock()
 
 def plan_tasks(query: str, history: list = None) -> list:
@@ -17,6 +17,13 @@ def plan_tasks(query: str, history: list = None) -> list:
     
     Strictly uses the FAST_LLM_MODEL for low-latency planning.
     """
+    query_lower = query.lower()
+    # Fast Deterministic Routing Hooks
+    if any(k in query_lower for k in ["ontology", "build graph", "initialize graph", "compile graph", "build the graph"]):
+        return [{"intent": "BUILD_ONTOLOGY", "sub_query": query}]
+    if any(k in query_lower for k in ["what if", "simulate", "predict", "forecast", "swarm", "mirofish"]):
+        return [{"intent": "RUN_PREDICTION", "sub_query": query}]
+
     history_context = ""
     if history:
         history_context = "<CONVERSATION_HISTORY>\n"
@@ -33,6 +40,8 @@ INTENT TYPES:
 1. DATA_ANALYSIS: Specific data lookups, counting, or filtering.
 2. FINANCIAL_ANALYSIS: Strategic decisions, rankings, comparisons, or adjusted value calculations.
 3. GENERAL: Greetings, conceptual explanations, or drafting documents (emails, reports) based on data.
+4. BUILD_ONTOLOGY: Building, initializing, compiling, or constructing the knowledge graph/ontology.
+5. RUN_PREDICTION: Simulating, predicting, forecasting what-if scenarios (e.g., base rent increases, tenant movements, category trends).
 
 STRRICT RULES (FIREWALL):
 1. THE ULTIMATE DIRECTIVE: The provided 'Query' is the absolute, overriding instruction.
@@ -116,6 +125,8 @@ Classify the user's query into ONE of the following categories:
 1. DATA_ANALYSIS → Use for specific data lookups, counting, or filtering (e.g., "How many transactions?").
 2. FINANCIAL_ANALYSIS → Use for strategic decisions, recommendations, comparisons involving specific entities, or calculating strategic/adjusted values for proposals (e.g., "Recommend a tenant", "Calculate strategic value for proposals").
 3. GENERAL → Use for conceptual explanations, greetings, or questions about how the business/system works WITHOUT needing specific database rows (e.g., "How does revenue share work?", "Explain yield").
+4. BUILD_ONTOLOGY → Use for building, initializing, compiling, or constructing the knowledge graph/ontology from database tables.
+5. RUN_PREDICTION → Use for simulating, predicting, forecasting what-if scenarios (e.g., "What if base rent is raised by 15%?", "Run a prediction for Zara leaving Kanyon").
 
 STRATEGIC RULES (FIREWALL):
 - THE ULTIMATE DIRECTIVE: The provided 'Query' is the absolute, overriding instruction.
@@ -130,7 +141,7 @@ Query: {query}
     fast_model = os.getenv("FAST_LLM_MODEL")
     try:
         response = call_llm([{"role": "user", "content": prompt}], model=fast_model)
-        for intent in ["DATA_ANALYSIS", "FINANCIAL_ANALYSIS", "GENERAL"]:
+        for intent in ["DATA_ANALYSIS", "FINANCIAL_ANALYSIS", "GENERAL", "BUILD_ONTOLOGY", "RUN_PREDICTION"]:
             if intent in response.upper():
                 return intent
         return "DATA_ANALYSIS" # Default
@@ -151,5 +162,11 @@ def route(query, results, intent=None, history=None):
     
     if intent == "GENERAL":
         return general_responder
+        
+    if intent == "BUILD_ONTOLOGY":
+        return ontology_builder
+        
+    if intent == "RUN_PREDICTION":
+        return prediction_simulator
         
     return data_analyst

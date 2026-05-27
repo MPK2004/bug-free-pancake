@@ -1,0 +1,1006 @@
+{
+  "nodes": [
+    {
+      "id": "M-1",
+      "label": "MALL",
+      "properties": {
+        "name": "Mall of Istanbul"
+      }
+    },
+    {
+      "id": "C-Istanbul",
+      "label": "CITY",
+      "properties": {
+        "name": "Istanbul"
+      }
+    },
+    {
+      "id": "M-2",
+      "label": "MALL",
+      "properties": {
+        "name": "Kanyon"
+      }
+    },
+    {
+      "id": "M-3",
+      "label": "MALL",
+      "properties": {
+        "name": "Metrocity"
+      }
+    },
+    {
+      "id": "M-4",
+      "label": "MALL",
+      "properties": {
+        "name": "Metropol AVM"
+      }
+    },
+    {
+      "id": "M-5",
+      "label": "MALL",
+      "properties": {
+        "name": "Istinye Park"
+      }
+    },
+    {
+      "id": "M-6",
+      "label": "MALL",
+      "properties": {
+        "name": "Zorlu Center"
+      }
+    },
+    {
+      "id": "M-7",
+      "label": "MALL",
+      "properties": {
+        "name": "Cevahir AVM"
+      }
+    },
+    {
+      "id": "M-8",
+      "label": "MALL",
+      "properties": {
+        "name": "Viaport Outlet"
+      }
+    },
+    {
+      "id": "M-9",
+      "label": "MALL",
+      "properties": {
+        "name": "Emaar Square Mall"
+      }
+    },
+    {
+      "id": "M-10",
+      "label": "MALL",
+      "properties": {
+        "name": "Forum Istanbul"
+      }
+    },
+    {
+      "id": "T-1",
+      "label": "TENANT",
+      "properties": {
+        "name": "Zara",
+        "brand_type": "Premium",
+        "category": "Clothing"
+      }
+    },
+    {
+      "id": "CT-Clothing",
+      "label": "CATEGORY",
+      "properties": {
+        "name": "Clothing"
+      }
+    },
+    {
+      "id": "T-2",
+      "label": "TENANT",
+      "properties": {
+        "name": "H&M",
+        "brand_type": "Mass",
+        "category": "Clothing"
+      }
+    },
+    {
+      "id": "T-3",
+      "label": "TENANT",
+      "properties": {
+        "name": "Nike",
+        "brand_type": "Premium",
+        "category": "Shoes"
+      }
+    },
+    {
+      "id": "CT-Shoes",
+      "label": "CATEGORY",
+      "properties": {
+        "name": "Shoes"
+      }
+    },
+    {
+      "id": "T-4",
+      "label": "TENANT",
+      "properties": {
+        "name": "Adidas",
+        "brand_type": "Premium",
+        "category": "Shoes"
+      }
+    },
+    {
+      "id": "T-5",
+      "label": "TENANT",
+      "properties": {
+        "name": "Samsung",
+        "brand_type": "Premium",
+        "category": "Technology"
+      }
+    },
+    {
+      "id": "CT-Technology",
+      "label": "CATEGORY",
+      "properties": {
+        "name": "Technology"
+      }
+    },
+    {
+      "id": "T-6",
+      "label": "TENANT",
+      "properties": {
+        "name": "Apple",
+        "brand_type": "Luxury",
+        "category": "Technology"
+      }
+    },
+    {
+      "id": "T-7",
+      "label": "TENANT",
+      "properties": {
+        "name": "KFC",
+        "brand_type": "Mass",
+        "category": "Food & Beverage"
+      }
+    },
+    {
+      "id": "CT-Food & Beverage",
+      "label": "CATEGORY",
+      "properties": {
+        "name": "Food & Beverage"
+      }
+    },
+    {
+      "id": "T-8",
+      "label": "TENANT",
+      "properties": {
+        "name": "Starbucks",
+        "brand_type": "Mass",
+        "category": "Food & Beverage"
+      }
+    },
+    {
+      "id": "T-9",
+      "label": "TENANT",
+      "properties": {
+        "name": "Sephora",
+        "brand_type": "Premium",
+        "category": "Cosmetics"
+      }
+    },
+    {
+      "id": "CT-Cosmetics",
+      "label": "CATEGORY",
+      "properties": {
+        "name": "Cosmetics"
+      }
+    },
+    {
+      "id": "T-10",
+      "label": "TENANT",
+      "properties": {
+        "name": "Toyzz Shop",
+        "brand_type": "Mass",
+        "category": "Toys"
+      }
+    },
+    {
+      "id": "CT-Toys",
+      "label": "CATEGORY",
+      "properties": {
+        "name": "Toys"
+      }
+    },
+    {
+      "id": "P-1",
+      "label": "PROPOSAL",
+      "properties": {
+        "proposed_rent": 150000.0,
+        "expected_sales": 5000000.0,
+        "expected_yield": 3.0
+      }
+    },
+    {
+      "id": "P-2",
+      "label": "PROPOSAL",
+      "properties": {
+        "proposed_rent": 80000.0,
+        "expected_sales": 2000000.0,
+        "expected_yield": 4.0
+      }
+    },
+    {
+      "id": "P-3",
+      "label": "PROPOSAL",
+      "properties": {
+        "proposed_rent": 120000.0,
+        "expected_sales": 3000000.0,
+        "expected_yield": 4.0
+      }
+    },
+    {
+      "id": "P-4",
+      "label": "PROPOSAL",
+      "properties": {
+        "proposed_rent": 140000.0,
+        "expected_sales": 4800000.0,
+        "expected_yield": 2.9166666666666665
+      }
+    },
+    {
+      "id": "P-5",
+      "label": "PROPOSAL",
+      "properties": {
+        "proposed_rent": 200000.0,
+        "expected_sales": 6000000.0,
+        "expected_yield": 3.3333333333333335
+      }
+    },
+    {
+      "id": "P-6",
+      "label": "PROPOSAL",
+      "properties": {
+        "proposed_rent": 50000.0,
+        "expected_sales": 1000000.0,
+        "expected_yield": 5.0
+      }
+    }
+  ],
+  "edges": [
+    {
+      "source": "M-1",
+      "target": "C-Istanbul",
+      "type": "LOCATED_IN"
+    },
+    {
+      "source": "M-2",
+      "target": "C-Istanbul",
+      "type": "LOCATED_IN"
+    },
+    {
+      "source": "M-3",
+      "target": "C-Istanbul",
+      "type": "LOCATED_IN"
+    },
+    {
+      "source": "M-4",
+      "target": "C-Istanbul",
+      "type": "LOCATED_IN"
+    },
+    {
+      "source": "M-5",
+      "target": "C-Istanbul",
+      "type": "LOCATED_IN"
+    },
+    {
+      "source": "M-6",
+      "target": "C-Istanbul",
+      "type": "LOCATED_IN"
+    },
+    {
+      "source": "M-7",
+      "target": "C-Istanbul",
+      "type": "LOCATED_IN"
+    },
+    {
+      "source": "M-8",
+      "target": "C-Istanbul",
+      "type": "LOCATED_IN"
+    },
+    {
+      "source": "M-9",
+      "target": "C-Istanbul",
+      "type": "LOCATED_IN"
+    },
+    {
+      "source": "M-10",
+      "target": "C-Istanbul",
+      "type": "LOCATED_IN"
+    },
+    {
+      "source": "T-1",
+      "target": "CT-Clothing",
+      "type": "BELONGS_TO"
+    },
+    {
+      "source": "T-2",
+      "target": "CT-Clothing",
+      "type": "BELONGS_TO"
+    },
+    {
+      "source": "T-3",
+      "target": "CT-Shoes",
+      "type": "BELONGS_TO"
+    },
+    {
+      "source": "T-4",
+      "target": "CT-Shoes",
+      "type": "BELONGS_TO"
+    },
+    {
+      "source": "T-5",
+      "target": "CT-Technology",
+      "type": "BELONGS_TO"
+    },
+    {
+      "source": "T-6",
+      "target": "CT-Technology",
+      "type": "BELONGS_TO"
+    },
+    {
+      "source": "T-7",
+      "target": "CT-Food & Beverage",
+      "type": "BELONGS_TO"
+    },
+    {
+      "source": "T-8",
+      "target": "CT-Food & Beverage",
+      "type": "BELONGS_TO"
+    },
+    {
+      "source": "T-9",
+      "target": "CT-Cosmetics",
+      "type": "BELONGS_TO"
+    },
+    {
+      "source": "T-10",
+      "target": "CT-Toys",
+      "type": "BELONGS_TO"
+    },
+    {
+      "source": "T-1",
+      "target": "M-1",
+      "type": "OPERATES_IN",
+      "properties": {
+        "base_rent": 120000.0,
+        "revenue_share_percentage": 2.5
+      }
+    },
+    {
+      "source": "T-2",
+      "target": "M-2",
+      "type": "OPERATES_IN",
+      "properties": {
+        "base_rent": 90000.0,
+        "revenue_share_percentage": 3.0
+      }
+    },
+    {
+      "source": "T-3",
+      "target": "M-3",
+      "type": "OPERATES_IN",
+      "properties": {
+        "base_rent": 70000.0,
+        "revenue_share_percentage": 2.0
+      }
+    },
+    {
+      "source": "T-4",
+      "target": "M-4",
+      "type": "OPERATES_IN",
+      "properties": {
+        "base_rent": 65000.0,
+        "revenue_share_percentage": 2.0
+      }
+    },
+    {
+      "source": "T-5",
+      "target": "M-5",
+      "type": "OPERATES_IN",
+      "properties": {
+        "base_rent": 110000.0,
+        "revenue_share_percentage": 1.5
+      }
+    },
+    {
+      "source": "T-6",
+      "target": "M-6",
+      "type": "OPERATES_IN",
+      "properties": {
+        "base_rent": 180000.0,
+        "revenue_share_percentage": 1.0
+      }
+    },
+    {
+      "source": "T-7",
+      "target": "M-7",
+      "type": "OPERATES_IN",
+      "properties": {
+        "base_rent": 45000.0,
+        "revenue_share_percentage": 5.0
+      }
+    },
+    {
+      "source": "T-8",
+      "target": "M-8",
+      "type": "OPERATES_IN",
+      "properties": {
+        "base_rent": 40000.0,
+        "revenue_share_percentage": 6.0
+      }
+    },
+    {
+      "source": "T-9",
+      "target": "M-9",
+      "type": "OPERATES_IN",
+      "properties": {
+        "base_rent": 55000.0,
+        "revenue_share_percentage": 4.0
+      }
+    },
+    {
+      "source": "T-10",
+      "target": "M-10",
+      "type": "OPERATES_IN",
+      "properties": {
+        "base_rent": 30000.0,
+        "revenue_share_percentage": 0.0
+      }
+    },
+    {
+      "source": "T-1",
+      "target": "P-1",
+      "type": "PROPOSES"
+    },
+    {
+      "source": "P-1",
+      "target": "M-1",
+      "type": "PROPOSED_AT"
+    },
+    {
+      "source": "T-3",
+      "target": "P-2",
+      "type": "PROPOSES"
+    },
+    {
+      "source": "P-2",
+      "target": "M-1",
+      "type": "PROPOSED_AT"
+    },
+    {
+      "source": "T-5",
+      "target": "P-3",
+      "type": "PROPOSES"
+    },
+    {
+      "source": "P-3",
+      "target": "M-1",
+      "type": "PROPOSED_AT"
+    },
+    {
+      "source": "T-1",
+      "target": "P-4",
+      "type": "PROPOSES"
+    },
+    {
+      "source": "P-4",
+      "target": "M-2",
+      "type": "PROPOSED_AT"
+    },
+    {
+      "source": "T-6",
+      "target": "P-5",
+      "type": "PROPOSES"
+    },
+    {
+      "source": "P-5",
+      "target": "M-2",
+      "type": "PROPOSED_AT"
+    },
+    {
+      "source": "T-7",
+      "target": "P-6",
+      "type": "PROPOSES"
+    },
+    {
+      "source": "P-6",
+      "target": "M-3",
+      "type": "PROPOSED_AT"
+    },
+    {
+      "source": "M-1",
+      "target": "M-2",
+      "type": "COMPETES_WITH",
+      "properties": {
+        "reason": "Shared geographic city catchment area"
+      }
+    },
+    {
+      "source": "M-1",
+      "target": "M-3",
+      "type": "COMPETES_WITH",
+      "properties": {
+        "reason": "Shared geographic city catchment area"
+      }
+    },
+    {
+      "source": "M-1",
+      "target": "M-4",
+      "type": "COMPETES_WITH",
+      "properties": {
+        "reason": "Shared geographic city catchment area"
+      }
+    },
+    {
+      "source": "M-1",
+      "target": "M-5",
+      "type": "COMPETES_WITH",
+      "properties": {
+        "reason": "Shared geographic city catchment area"
+      }
+    },
+    {
+      "source": "M-1",
+      "target": "M-6",
+      "type": "COMPETES_WITH",
+      "properties": {
+        "reason": "Shared geographic city catchment area"
+      }
+    },
+    {
+      "source": "M-1",
+      "target": "M-7",
+      "type": "COMPETES_WITH",
+      "properties": {
+        "reason": "Shared geographic city catchment area"
+      }
+    },
+    {
+      "source": "M-1",
+      "target": "M-8",
+      "type": "COMPETES_WITH",
+      "properties": {
+        "reason": "Shared geographic city catchment area"
+      }
+    },
+    {
+      "source": "M-1",
+      "target": "M-9",
+      "type": "COMPETES_WITH",
+      "properties": {
+        "reason": "Shared geographic city catchment area"
+      }
+    },
+    {
+      "source": "M-1",
+      "target": "M-10",
+      "type": "COMPETES_WITH",
+      "properties": {
+        "reason": "Shared geographic city catchment area"
+      }
+    },
+    {
+      "source": "M-2",
+      "target": "M-3",
+      "type": "COMPETES_WITH",
+      "properties": {
+        "reason": "Shared geographic city catchment area"
+      }
+    },
+    {
+      "source": "M-2",
+      "target": "M-4",
+      "type": "COMPETES_WITH",
+      "properties": {
+        "reason": "Shared geographic city catchment area"
+      }
+    },
+    {
+      "source": "M-2",
+      "target": "M-5",
+      "type": "COMPETES_WITH",
+      "properties": {
+        "reason": "Shared geographic city catchment area"
+      }
+    },
+    {
+      "source": "M-2",
+      "target": "M-6",
+      "type": "COMPETES_WITH",
+      "properties": {
+        "reason": "Shared geographic city catchment area"
+      }
+    },
+    {
+      "source": "M-2",
+      "target": "M-7",
+      "type": "COMPETES_WITH",
+      "properties": {
+        "reason": "Shared geographic city catchment area"
+      }
+    },
+    {
+      "source": "M-2",
+      "target": "M-8",
+      "type": "COMPETES_WITH",
+      "properties": {
+        "reason": "Shared geographic city catchment area"
+      }
+    },
+    {
+      "source": "M-2",
+      "target": "M-9",
+      "type": "COMPETES_WITH",
+      "properties": {
+        "reason": "Shared geographic city catchment area"
+      }
+    },
+    {
+      "source": "M-2",
+      "target": "M-10",
+      "type": "COMPETES_WITH",
+      "properties": {
+        "reason": "Shared geographic city catchment area"
+      }
+    },
+    {
+      "source": "M-3",
+      "target": "M-4",
+      "type": "COMPETES_WITH",
+      "properties": {
+        "reason": "Shared geographic city catchment area"
+      }
+    },
+    {
+      "source": "M-3",
+      "target": "M-5",
+      "type": "COMPETES_WITH",
+      "properties": {
+        "reason": "Shared geographic city catchment area"
+      }
+    },
+    {
+      "source": "M-3",
+      "target": "M-6",
+      "type": "COMPETES_WITH",
+      "properties": {
+        "reason": "Shared geographic city catchment area"
+      }
+    },
+    {
+      "source": "M-3",
+      "target": "M-7",
+      "type": "COMPETES_WITH",
+      "properties": {
+        "reason": "Shared geographic city catchment area"
+      }
+    },
+    {
+      "source": "M-3",
+      "target": "M-8",
+      "type": "COMPETES_WITH",
+      "properties": {
+        "reason": "Shared geographic city catchment area"
+      }
+    },
+    {
+      "source": "M-3",
+      "target": "M-9",
+      "type": "COMPETES_WITH",
+      "properties": {
+        "reason": "Shared geographic city catchment area"
+      }
+    },
+    {
+      "source": "M-3",
+      "target": "M-10",
+      "type": "COMPETES_WITH",
+      "properties": {
+        "reason": "Shared geographic city catchment area"
+      }
+    },
+    {
+      "source": "M-4",
+      "target": "M-5",
+      "type": "COMPETES_WITH",
+      "properties": {
+        "reason": "Shared geographic city catchment area"
+      }
+    },
+    {
+      "source": "M-4",
+      "target": "M-6",
+      "type": "COMPETES_WITH",
+      "properties": {
+        "reason": "Shared geographic city catchment area"
+      }
+    },
+    {
+      "source": "M-4",
+      "target": "M-7",
+      "type": "COMPETES_WITH",
+      "properties": {
+        "reason": "Shared geographic city catchment area"
+      }
+    },
+    {
+      "source": "M-4",
+      "target": "M-8",
+      "type": "COMPETES_WITH",
+      "properties": {
+        "reason": "Shared geographic city catchment area"
+      }
+    },
+    {
+      "source": "M-4",
+      "target": "M-9",
+      "type": "COMPETES_WITH",
+      "properties": {
+        "reason": "Shared geographic city catchment area"
+      }
+    },
+    {
+      "source": "M-4",
+      "target": "M-10",
+      "type": "COMPETES_WITH",
+      "properties": {
+        "reason": "Shared geographic city catchment area"
+      }
+    },
+    {
+      "source": "M-5",
+      "target": "M-6",
+      "type": "COMPETES_WITH",
+      "properties": {
+        "reason": "Shared geographic city catchment area"
+      }
+    },
+    {
+      "source": "M-5",
+      "target": "M-7",
+      "type": "COMPETES_WITH",
+      "properties": {
+        "reason": "Shared geographic city catchment area"
+      }
+    },
+    {
+      "source": "M-5",
+      "target": "M-8",
+      "type": "COMPETES_WITH",
+      "properties": {
+        "reason": "Shared geographic city catchment area"
+      }
+    },
+    {
+      "source": "M-5",
+      "target": "M-9",
+      "type": "COMPETES_WITH",
+      "properties": {
+        "reason": "Shared geographic city catchment area"
+      }
+    },
+    {
+      "source": "M-5",
+      "target": "M-10",
+      "type": "COMPETES_WITH",
+      "properties": {
+        "reason": "Shared geographic city catchment area"
+      }
+    },
+    {
+      "source": "M-6",
+      "target": "M-7",
+      "type": "COMPETES_WITH",
+      "properties": {
+        "reason": "Shared geographic city catchment area"
+      }
+    },
+    {
+      "source": "M-6",
+      "target": "M-8",
+      "type": "COMPETES_WITH",
+      "properties": {
+        "reason": "Shared geographic city catchment area"
+      }
+    },
+    {
+      "source": "M-6",
+      "target": "M-9",
+      "type": "COMPETES_WITH",
+      "properties": {
+        "reason": "Shared geographic city catchment area"
+      }
+    },
+    {
+      "source": "M-6",
+      "target": "M-10",
+      "type": "COMPETES_WITH",
+      "properties": {
+        "reason": "Shared geographic city catchment area"
+      }
+    },
+    {
+      "source": "M-7",
+      "target": "M-8",
+      "type": "COMPETES_WITH",
+      "properties": {
+        "reason": "Shared geographic city catchment area"
+      }
+    },
+    {
+      "source": "M-7",
+      "target": "M-9",
+      "type": "COMPETES_WITH",
+      "properties": {
+        "reason": "Shared geographic city catchment area"
+      }
+    },
+    {
+      "source": "M-7",
+      "target": "M-10",
+      "type": "COMPETES_WITH",
+      "properties": {
+        "reason": "Shared geographic city catchment area"
+      }
+    },
+    {
+      "source": "M-8",
+      "target": "M-9",
+      "type": "COMPETES_WITH",
+      "properties": {
+        "reason": "Shared geographic city catchment area"
+      }
+    },
+    {
+      "source": "M-8",
+      "target": "M-10",
+      "type": "COMPETES_WITH",
+      "properties": {
+        "reason": "Shared geographic city catchment area"
+      }
+    },
+    {
+      "source": "M-9",
+      "target": "M-10",
+      "type": "COMPETES_WITH",
+      "properties": {
+        "reason": "Shared geographic city catchment area"
+      }
+    },
+    {
+      "source": "T-1",
+      "target": "M-1",
+      "type": "ANCHORS",
+      "properties": {
+        "reason": "Volume share 47.57% (>20%) makes Zara a dominant anchor in Mall of Istanbul."
+      }
+    },
+    {
+      "source": "T-3",
+      "target": "M-1",
+      "type": "ANCHORS",
+      "properties": {
+        "reason": "Volume share 27.92% (>20%) makes Nike a dominant anchor in Mall of Istanbul."
+      }
+    },
+    {
+      "source": "T-5",
+      "target": "M-1",
+      "type": "ANCHORS",
+      "properties": {
+        "reason": "Volume share 24.52% (>20%) makes Samsung a dominant anchor in Mall of Istanbul."
+      }
+    },
+    {
+      "source": "T-6",
+      "target": "M-2",
+      "type": "ANCHORS",
+      "properties": {
+        "reason": "Volume share 34.57% (>20%) makes Apple a dominant anchor in Kanyon."
+      }
+    },
+    {
+      "source": "T-2",
+      "target": "M-2",
+      "type": "ANCHORS",
+      "properties": {
+        "reason": "Volume share 32.72% (>20%) makes H&M a dominant anchor in Kanyon."
+      }
+    },
+    {
+      "source": "T-1",
+      "target": "M-2",
+      "type": "ANCHORS",
+      "properties": {
+        "reason": "Volume share 32.72% (>20%) makes Zara a dominant anchor in Kanyon."
+      }
+    },
+    {
+      "source": "T-3",
+      "target": "M-3",
+      "type": "ANCHORS",
+      "properties": {
+        "reason": "Volume share 98.65% (>20%) makes Nike the sole dominant anchor in Metrocity."
+      }
+    },
+    {
+      "source": "T-4",
+      "target": "M-4",
+      "type": "ANCHORS",
+      "properties": {
+        "reason": "Volume share 100% (>20%) makes Adidas the sole dominant anchor in Metropol AVM."
+      }
+    },
+    {
+      "source": "T-5",
+      "target": "M-5",
+      "type": "ANCHORS",
+      "properties": {
+        "reason": "Volume share 100% (>20%) makes Samsung the sole dominant anchor in Istinye Park."
+      }
+    },
+    {
+      "source": "T-6",
+      "target": "M-6",
+      "type": "ANCHORS",
+      "properties": {
+        "reason": "Volume share 100% (>20%) makes Apple the sole dominant anchor in Zorlu Center."
+      }
+    },
+    {
+      "source": "T-7",
+      "target": "M-7",
+      "type": "ANCHORS",
+      "properties": {
+        "reason": "Volume share 100% (>20%) makes KFC the sole dominant anchor in Cevahir AVM."
+      }
+    },
+    {
+      "source": "T-8",
+      "target": "M-8",
+      "type": "ANCHORS",
+      "properties": {
+        "reason": "Volume share 100% (>20%) makes Starbucks the sole dominant anchor in Viaport Outlet."
+      }
+    },
+    {
+      "source": "T-9",
+      "target": "M-9",
+      "type": "ANCHORS",
+      "properties": {
+        "reason": "Volume share 100% (>20%) makes Sephora the sole dominant anchor in Emaar Square Mall."
+      }
+    },
+    {
+      "source": "T-10",
+      "target": "M-10",
+      "type": "ANCHORS",
+      "properties": {
+        "reason": "Volume share 100% (>20%) makes Toyzz Shop the sole dominant anchor in Forum Istanbul."
+      }
+    },
+    {
+      "source": "T-2",
+      "target": "T-1",
+      "type": "COMPETES_WITH",
+      "properties": {
+        "reason": "Both are Clothing tenants (H&M and Zara) in the same mall (Kanyon) and each holds >20% share, indicating direct competition."
+      }
+    }
+  ],
+  "metadata": {
+    "compiled_at": "2026-05-27T05:16:17Z",
+    "total_nodes": 33,
+    "total_edges": 102,
+    "anchor_relationships": 14,
+    "competitor_relationships": 46
+  }
+}
